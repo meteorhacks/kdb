@@ -1,3 +1,3 @@
 # Kadira DB
 
-An attempt to create a database to store kadira metrics.
+ACID Time Series DB for any kind of storage - No it isn't
