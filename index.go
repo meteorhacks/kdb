@@ -6,27 +6,28 @@ import (
 )
 
 type IndexOpts struct {
-	Path string // path to the index file
+	Keys []string // index keys
+	Path string   // path to the index file
 }
 
 type Index struct {
 	opts IndexOpts
-	data map[string]int64 // TODO: replace with a tree
-	file *os.File         // index file handler
-	encd *json.Encoder    // use protobuff for better perf
-	decd *json.Decoder    // use protobuff for better perf
+	data *MemIndex     // in-memory index
+	file *os.File      // index file handler
+	encd *json.Encoder // use protobuff for better perf
+	decd *json.Decoder // use protobuff for better perf
 }
 
 func NewIndex(opts IndexOpts) (in *Index, err error) {
-	dm := map[string]int64{}
 	fd, err := os.OpenFile(opts.Path, FMode, FPerms)
 	if err != nil {
 		return nil, err
 	}
 
+	mi := NewMemIndex(opts.Keys)
 	en := json.NewEncoder(fd)
 	de := json.NewDecoder(fd)
-	in = &Index{opts, dm, fd, en, de}
+	in = &Index{opts, mi, fd, en, de}
 
 	return in, nil
 }
