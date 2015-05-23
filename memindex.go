@@ -26,17 +26,17 @@ type MemIndex struct {
 // Create a new MemIndex for a given set of keys
 // All the items we add needs to have all the keys defined here
 // Here's an example:
+//
+//
+// 	index := NewMemIndex(string[]{"appId", "metric", "host"})
+// 	var blockPosition int64 = 1000;
+// 	item := map[string]string{"appId": "kadira", "metric": "cpu", "host": "h1"}
+// 	err := index.addItem(item, blockPosition)
+// 	fmt.Println(err)
 
-// ```
-// index := NewMemIndex(string[]{"appId", "metric", "host"})
-// var blockPosition int64 = 1000;
-// item := map[string]string{"appId": "kadira", "metric": "cpu", "host": "h1"}
-// err := index.addItem(item, blockPosition)
-// fmt.Println(err)
-
-// err, element := index.getElement(item)
-// fmt.Println("blockPosition is:", element.BlockPosition)
-// ```
+// 	err, element := index.getElement(item)
+// 	fmt.Println("blockPosition is:", element.BlockPosition)
+//
 
 func NewMemIndex(orderedKeys []string) MemIndex {
 	index := MemIndex{}
@@ -121,9 +121,8 @@ func (m MemIndex) GetElement(item map[string]string) (error, *IndexElement) {
 //	* all the cpu meterics of a given appId
 //	* all the cpu meterics of a given appId and host
 //
-// ```
-// _, elements := index.FindElement(map[string]string{"appId": "abc", "metric": "cpu"})
-// ```
+//	 _, elements := index.FindElement(map[string]string{"appId": "abc", "metric": "cpu"})
+//
 func (m MemIndex) FindElements(query map[string]string) (error, []*IndexElement) {
 	values := make([]string, 0)
 	elements := make([]*IndexElement, 0)
