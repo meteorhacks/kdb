@@ -1,26 +1,24 @@
 package kdb
 
-import (
-	"fmt"
-)
+import "errors"
 
 // Struct representing an element in the index. Here we are maintaining a
 // tree structure. So, it's `Values` field only containes in the leaf nodes only
-// `Map` only conatains in root and intermediate nodes only
+// `Children` only conatains in root and intermediate nodes only
 //
 // Here all the data elements are on the lowest level, which are leafs
 type IndexElement struct {
-	Values        []string
-	BlockPosition int64
-	Map           map[string]*IndexElement
+	Values   []string
+	Position int64
+	Children map[string]*IndexElement
 }
 
 // Base struct of the MemIndex
 // It contains an element called `root` which is the starting point of the tree
-// orderedKeys contains all the keys in this index in ordered fashion
+// keys contains all the keys in this index in ordered fashion
 type MemIndex struct {
-	root        *IndexElement
-	orderedKeys []string
+	root *IndexElement
+	keys []string
 }
 
 // Create a new MemIndex for a given set of keys
@@ -29,88 +27,97 @@ type MemIndex struct {
 //
 //
 // 	index := NewMemIndex(string[]{"appId", "metric", "host"})
-// 	var blockPosition int64 = 1000;
+// 	var position int64 = 1000;
 // 	item := map[string]string{"appId": "kadira", "metric": "cpu", "host": "h1"}
-// 	err := index.addItem(item, blockPosition)
+// 	err := index.addItem(item, position)
 // 	fmt.Println(err)
 
 // 	err, element := index.getElement(item)
-// 	fmt.Println("blockPosition is:", element.BlockPosition)
+// 	fmt.Println("position is:", element.Position)
 //
 
-func NewMemIndex(orderedKeys []string) MemIndex {
-	index := MemIndex{}
-	index.root = makeIndexElement()
-	index.orderedKeys = orderedKeys
+func NewMemIndex(keys []string) (mi *MemIndex) {
+	mi = &MemIndex{nil, keys}
+	mi.root = mi.newElement()
 
-	return index
+	return mi
 }
 
-// Add Item to the index with the blockPosition
+// TODO: add comment
+func (mi *MemIndex) newElement() (el *IndexElement) {
+	el = &IndexElement{}
+	el.Children = make(map[string]*IndexElement)
+	return el
+}
+
+// Add Item to the index with the position
 // return an error, if the item does not have all the keys needs by the index
-func (m MemIndex) AddItem(item map[string]string, blockPosition int64) error {
-	immediateRoot := m.root
-	lenKeys := len(m.orderedKeys)
+func (mi *MemIndex) AddItem(item map[string]string, position int64) (err error) {
+	root := mi.root
+	lenKeys := len(mi.keys)
 
 	el := IndexElement{}
 	el.Values = make([]string, lenKeys)
-	el.BlockPosition = blockPosition
+	el.Position = position
 
-	for lc, key := range m.orderedKeys[0 : lenKeys-1] {
+	for lc, key := range mi.keys[0 : lenKeys-1] {
 		value := item[key]
 
 		if value == "" {
-			return fmt.Errorf("no value for `%s`", key)
+			err = errors.New("no value for " + key)
+			return err
 		}
 
-		newImmediateRoot := immediateRoot.Map[value]
-		if newImmediateRoot == nil {
-			newImmediateRoot = makeIndexElement()
-			immediateRoot.Map[value] = newImmediateRoot
+		newRoot := root.Children[value]
+		if newRoot == nil {
+			newRoot = mi.newElement()
+			root.Children[value] = newRoot
 		}
 
-		immediateRoot = newImmediateRoot
+		root = newRoot
 		el.Values[lc] = value
 	}
 
-	lastKey := m.orderedKeys[lenKeys-1 : lenKeys][0]
+	lastKey := mi.keys[lenKeys-1 : lenKeys][0]
 	lastValue := item[lastKey]
 
 	if lastValue == "" {
-		return fmt.Errorf("no value for `%s`", lastKey)
+		err = errors.New("no value for " + lastKey)
+		return err
 	}
 
 	el.Values[lenKeys-1] = lastValue
 
-	immediateRoot.Map[lastValue] = &el
+	root.Children[lastValue] = &el
 
 	return nil
 }
 
 // Get the IndexElement related to item
-// With that we can get the BlockPosition we've added
+// With that we can get the Position we've added
 // Return an error if item does not have all the keys in the index
-func (m MemIndex) GetElement(item map[string]string) (error, *IndexElement) {
-	values := make([]string, len(m.orderedKeys))
+func (mi *MemIndex) GetElement(item map[string]string) (el *IndexElement, err error) {
+	values := make([]string, len(mi.keys))
 
-	for lc, key := range m.orderedKeys {
+	for lc, key := range mi.keys {
 		value := item[key]
 		if value == "" {
-			return fmt.Errorf("no value for '%s'", key), nil
+			err = errors.New("no value for " + key)
+			return nil, err
 		}
 
 		values[lc] = value
 	}
 
-	el := m.root
+	el = mi.root
 	for _, value := range values {
-		el = el.Map[value]
+		el = el.Children[value]
 		if el == nil {
 			return nil, nil
 		}
 	}
 
-	return nil, el
+	return el, nil
 }
 
 // HighLevel function to find elements in the index
@@ -123,11 +130,11 @@ func (m MemIndex) GetElement(item map[string]string) (error, *IndexElement) {
 //
 //	 _, elements := index.FindElement(map[string]string{"appId": "abc", "metric": "cpu"})
 //
-func (m MemIndex) FindElements(query map[string]string) (error, []*IndexElement) {
+func (mi *MemIndex) FindElements(query map[string]string) (els []*IndexElement, err error) {
 	values := make([]string, 0)
-	elements := make([]*IndexElement, 0)
+	els = make([]*IndexElement, 0)
 
-	for _, key := range m.orderedKeys {
+	for _, key := range mi.keys {
 		value := query[key]
 		if value == "" {
 			break
@@ -136,31 +143,28 @@ func (m MemIndex) FindElements(query map[string]string) (error, []*IndexElement)
 		values = append(values, value)
 	}
 
-	el := m.root
+	el := mi.root
 	for _, value := range values {
-		el = el.Map[value]
+		el = el.Children[value]
 		if el == nil {
-			return nil, elements
+			return els, nil
 		}
 	}
 
-	return nil, findElements(el, elements)
+	els = mi.findElements(el, els)
+
+	return els, nil
 }
 
-func findElements(el *IndexElement, elements []*IndexElement) []*IndexElement {
-	isRootNode := el.Map != nil
-	if isRootNode {
-		for _, value := range el.Map {
-			elements = findElements(value, elements)
+// TODO: add comment
+func (mi *MemIndex) findElements(el *IndexElement, els []*IndexElement) []*IndexElement {
+	if el.Children != nil {
+		for _, value := range el.Children {
+			els = mi.findElements(value, els)
 		}
-		return elements
+
+		return els
 	} else {
-		return append(elements, el)
+		return append(els, el)
 	}
-}
-
-func makeIndexElement() *IndexElement {
-	el := IndexElement{}
-	el.Map = make(map[string]*IndexElement)
-	return &el
 }
