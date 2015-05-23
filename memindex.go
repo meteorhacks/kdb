@@ -17,8 +17,8 @@ type IndexElement struct {
 // It contains an element called `root` which is the starting point of the tree
 // keys contains all the keys in this index in ordered fashion
 type MemIndex struct {
-	root *IndexElement
-	keys []string
+	Root *IndexElement
+	Keys []string
 }
 
 // Create a new MemIndex for a given set of keys
@@ -38,7 +38,7 @@ type MemIndex struct {
 
 func NewMemIndex(keys []string) (mi *MemIndex) {
 	mi = &MemIndex{nil, keys}
-	mi.root = mi.newElement()
+	mi.Root = mi.newElement()
 
 	return mi
 }
@@ -53,14 +53,14 @@ func (mi *MemIndex) newElement() (el *IndexElement) {
 // Add Item to the index with the position
 // return an error, if the item does not have all the keys needs by the index
 func (mi *MemIndex) AddItem(item map[string]string, position int64) (err error) {
-	root := mi.root
-	lenKeys := len(mi.keys)
+	root := mi.Root
+	lenKeys := len(mi.Keys)
 
 	el := IndexElement{}
 	el.Values = make([]string, lenKeys)
 	el.Position = position
 
-	for lc, key := range mi.keys[0 : lenKeys-1] {
+	for lc, key := range mi.Keys[0 : lenKeys-1] {
 		value := item[key]
 
 		if value == "" {
@@ -78,7 +78,7 @@ func (mi *MemIndex) AddItem(item map[string]string, position int64) (err error) 
 		el.Values[lc] = value
 	}
 
-	lastKey := mi.keys[lenKeys-1 : lenKeys][0]
+	lastKey := mi.Keys[lenKeys-1 : lenKeys][0]
 	lastValue := item[lastKey]
 
 	if lastValue == "" {
@@ -97,9 +97,9 @@ func (mi *MemIndex) AddItem(item map[string]string, position int64) (err error) 
 // With that we can get the Position we've added
 // Return an error if item does not have all the keys in the index
 func (mi *MemIndex) GetElement(item map[string]string) (el *IndexElement, err error) {
-	values := make([]string, len(mi.keys))
+	values := make([]string, len(mi.Keys))
 
-	for lc, key := range mi.keys {
+	for lc, key := range mi.Keys {
 		value := item[key]
 		if value == "" {
 			err = errors.New("no value for " + key)
@@ -109,7 +109,7 @@ func (mi *MemIndex) GetElement(item map[string]string) (el *IndexElement, err er
 		values[lc] = value
 	}
 
-	el = mi.root
+	el = mi.Root
 	for _, value := range values {
 		el = el.Children[value]
 		if el == nil {
@@ -134,7 +134,7 @@ func (mi *MemIndex) FindElements(query map[string]string) (els []*IndexElement, 
 	values := make([]string, 0)
 	els = make([]*IndexElement, 0)
 
-	for _, key := range mi.keys {
+	for _, key := range mi.Keys {
 		value := query[key]
 		if value == "" {
 			break
@@ -143,7 +143,7 @@ func (mi *MemIndex) FindElements(query map[string]string) (els []*IndexElement, 
 		values = append(values, value)
 	}
 
-	el := mi.root
+	el := mi.Root
 	for _, value := range values {
 		el = el.Children[value]
 		if el == nil {

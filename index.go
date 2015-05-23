@@ -52,7 +52,7 @@ func (in *Index) Load() (err error) {
 		return err
 	}
 
-	if err = in.decd.Decode(&in.data); err != nil {
+	if err = in.decd.Decode(in.data); err != nil {
 		return err
 	}
 

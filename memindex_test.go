@@ -11,11 +11,11 @@ import (
 func TestCreateIndex(t *testing.T) {
 	keys := []string{"appId", "host"}
 	index := NewMemIndex(keys)
-	if !reflect.DeepEqual(index.keys, keys) {
+	if !reflect.DeepEqual(index.Keys, keys) {
 		t.Fatal("orderedKey must be set")
 	}
 
-	if index.root == nil {
+	if index.Root == nil {
 		t.Fatal("index root must be set")
 	}
 }
@@ -29,7 +29,7 @@ func TestAddItemToIndex(t *testing.T) {
 	var position int64 = 10
 	index.AddItem(item, position)
 
-	addedItem := index.root.Children["kadira"].Children["h1"]
+	addedItem := index.Root.Children["kadira"].Children["h1"]
 
 	if addedItem.Position != position {
 		t.Fatal("block position must be present")
@@ -51,7 +51,7 @@ func TestAddItemToIndexOverride(t *testing.T) {
 	position = 100
 	index.AddItem(item, position)
 
-	addedItem := index.root.Children["kadira"].Children["h1"]
+	addedItem := index.Root.Children["kadira"].Children["h1"]
 
 	if addedItem.Position != position {
 		t.Fatal("block position does not get overridden")
