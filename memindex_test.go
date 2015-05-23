@@ -12,11 +12,11 @@ func TestCreateIndex(t *testing.T) {
 	keys := []string{"appId", "host"}
 	index := NewMemIndex(keys)
 	if !reflect.DeepEqual(index.keys, keys) {
-		t.Error("orderedKey must be set")
+		t.Fatal("orderedKey must be set")
 	}
 
 	if index.root == nil {
-		t.Error("index root must be set")
+		t.Fatal("index root must be set")
 	}
 }
 
@@ -32,12 +32,12 @@ func TestAddItemToIndex(t *testing.T) {
 	addedItem := index.root.Children["kadira"].Children["h1"]
 
 	if addedItem.Position != position {
-		t.Error("block position must be present")
+		t.Fatal("block position must be present")
 	}
 
 	expected := []string{"kadira", "h1"}
 	if !reflect.DeepEqual(addedItem.Values, expected) {
-		t.Error("values are incorrect")
+		t.Fatal("values are incorrect")
 	}
 }
 
@@ -54,7 +54,7 @@ func TestAddItemToIndexOverride(t *testing.T) {
 	addedItem := index.root.Children["kadira"].Children["h1"]
 
 	if addedItem.Position != position {
-		t.Error("block position does not get overridden")
+		t.Fatal("block position does not get overridden")
 	}
 }
 
@@ -66,7 +66,7 @@ func TestAddItemToIndexWithInsuffiecientKeys(t *testing.T) {
 	err := index.AddItem(item, position)
 
 	if err == nil {
-		t.Error("need to have an error", err)
+		t.Fatal("need to have an error", err)
 	}
 }
 
@@ -78,7 +78,7 @@ func TestAddItemToIndexWithNoKeys(t *testing.T) {
 	err := index.AddItem(item, position)
 
 	if err == nil {
-		t.Error("need to have an error", err)
+		t.Fatal("need to have an error", err)
 	}
 }
 
@@ -94,16 +94,16 @@ func TestGetElement(t *testing.T) {
 	addedItem, _ := index.GetElement(item)
 
 	if addedItem == nil {
-		t.Error("couldn't get the added item")
+		t.Fatal("couldn't get the added item")
 	}
 
 	if addedItem.Position != position {
-		t.Error("block position must be present")
+		t.Fatal("block position must be present")
 	}
 
 	expectedValues := []string{"kadira", "h1"}
 	if !reflect.DeepEqual(addedItem.Values, expectedValues) {
-		t.Error("values are incorrect")
+		t.Fatal("values are incorrect")
 	}
 }
 
@@ -118,11 +118,11 @@ func TestGetElementNoSuchElement(t *testing.T) {
 	addedItem, err := index.GetElement(nonExistingEl)
 
 	if err != nil {
-		t.Error("cannot have a error")
+		t.Fatal("cannot have a error")
 	}
 
 	if addedItem != nil {
-		t.Error("cannot have element")
+		t.Fatal("cannot have element")
 	}
 }
 
@@ -137,7 +137,7 @@ func TestGetElementInsufficientKeys(t *testing.T) {
 	_, err := index.GetElement(query)
 
 	if err == nil {
-		t.Error("need to have an error")
+		t.Fatal("need to have an error")
 	}
 }
 
@@ -153,11 +153,11 @@ func TestFindElementsInBottom(t *testing.T) {
 	elements, _ := index.FindElements(item)
 
 	if len(elements) != 1 {
-		t.Error("could not find the element")
+		t.Fatal("could not find the element")
 	}
 
 	if elements[0].Position != position {
-		t.Error("found the wrong element")
+		t.Fatal("found the wrong element")
 	}
 }
 
@@ -170,7 +170,7 @@ func TestFindElementsInMiddleRoot(t *testing.T) {
 	elements, _ := index.FindElements(map[string]string{"appId": "kadira"})
 
 	if len(elements) != 2 {
-		t.Error("could not find the element")
+		t.Fatal("could not find the element")
 	}
 
 	positions := make([]int64, len(elements))
@@ -179,7 +179,7 @@ func TestFindElementsInMiddleRoot(t *testing.T) {
 	}
 
 	if !reflect.DeepEqual(positions, []int64{10, 20}) {
-		t.Error("found wrong elements")
+		t.Fatal("found wrong elements")
 	}
 }
 
@@ -193,7 +193,7 @@ func TestFindElementsInTopLevel(t *testing.T) {
 	elements, _ := index.FindElements(map[string]string{})
 
 	if len(elements) != 4 {
-		t.Error("could not find the element")
+		t.Fatal("could not find the element")
 	}
 
 	positions := make([]int, len(elements))
@@ -204,6 +204,6 @@ func TestFindElementsInTopLevel(t *testing.T) {
 	sort.Ints(positions)
 
 	if !reflect.DeepEqual(positions, []int{10, 20, 30, 40}) {
-		t.Error("found wrong elements", positions)
+		t.Fatal("found wrong elements", positions)
 	}
 }

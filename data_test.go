@@ -17,18 +17,18 @@ func TestDataNewRecord(t *testing.T) {
 
 	fi, err := dt.file.Stat()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	} else if fz := fi.Size(); fz != 0 {
-		t.Error("file size should be 0 ", fz)
+		t.Fatal("file size should be 0 ", fz)
 	}
 
 	// try creating a few records and see how the data file grows
 	for i := 0; i < 5; i++ {
 		o, err := dt.NewRecord()
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		} else if e := 4 * 10 * i; o != int64(e) {
-			t.Error("offset should be ", e, o)
+			t.Fatal("offset should be ", e, o)
 		}
 	}
 }
@@ -45,37 +45,37 @@ func TestDataWriteRead(t *testing.T) {
 
 	o, err := dt.NewRecord()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	b1 := []byte("byte")
 	err = dt.Write(b1, o)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	b2 := []byte("kite")
 	err = dt.Write(b2, o+4)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	v1, err := dt.Read(o, 1)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	if string(b1) != string(v1) {
-		t.Error("values should match")
+		t.Fatal("values should match")
 	}
 
 	v2, err := dt.Read(o, 2)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	if string(b1)+string(b2) != string(v2) {
-		t.Error("values should match")
+		t.Fatal("values should match")
 	}
 }
 
