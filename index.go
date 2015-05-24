@@ -10,6 +10,17 @@ type IndexOpts struct {
 	Path string   // path to the index file
 }
 
+// Struct representing an element in the index. Here we are maintaining a
+// tree structure. So, it's `Values` field only containes in the leaf nodes only
+// `Children` only conatains in root and intermediate nodes only
+//
+// Here all the data elements are on the lowest level, which are leafs
+type IndexElement struct {
+	Values   []string
+	Position int64
+	Children map[string]*IndexElement
+}
+
 type Index struct {
 	opts IndexOpts
 	data *MemIndex     // in-memory index
@@ -30,6 +41,22 @@ func NewIndex(opts IndexOpts) (in *Index, err error) {
 	in = &Index{opts, mi, fd, en, de}
 
 	return in, nil
+}
+
+func (in *Index) Get(item map[string]string) (el *IndexElement, err error) {
+	return in.data.GetElement(item)
+}
+
+func (in *Index) Find(query map[string]string) (els []*IndexElement, err error) {
+	return in.data.FindElements(query)
+}
+
+func (in *Index) MakeQuery(el *IndexElement) (query map[string]string, err error) {
+	return in.data.MakeQuery(el)
+}
+
+func (in *Index) AddItem(item map[string]string, position int64) (el *IndexElement, err error) {
+	return in.data.AddItem(item, position)
 }
 
 // writes the index map to the filesystem

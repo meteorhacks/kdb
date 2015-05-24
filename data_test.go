@@ -65,7 +65,7 @@ func TestDataWriteRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if string(b1) != string(v1) {
+	if string(b1) != string(v1[0]) {
 		t.Fatal("values should match")
 	}
 
@@ -74,7 +74,7 @@ func TestDataWriteRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if string(b1)+string(b2) != string(v2) {
+	if string(b2) != string(v2[1]) {
 		t.Fatal("values should match")
 	}
 }

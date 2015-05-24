@@ -63,7 +63,7 @@ func TestAddItemToIndexWithInsuffiecientKeys(t *testing.T) {
 	item := map[string]string{"appId": "kadira"}
 
 	var position int64 = 10
-	err := index.AddItem(item, position)
+	_, err := index.AddItem(item, position)
 
 	if err == nil {
 		t.Fatal("need to have an error", err)
@@ -75,7 +75,7 @@ func TestAddItemToIndexWithNoKeys(t *testing.T) {
 	item := map[string]string{}
 
 	var position int64 = 10
-	err := index.AddItem(item, position)
+	_, err := index.AddItem(item, position)
 
 	if err == nil {
 		t.Fatal("need to have an error", err)

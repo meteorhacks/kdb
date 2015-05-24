@@ -2,17 +2,6 @@ package kdb
 
 import "errors"
 
-// Struct representing an element in the index. Here we are maintaining a
-// tree structure. So, it's `Values` field only containes in the leaf nodes only
-// `Children` only conatains in root and intermediate nodes only
-//
-// Here all the data elements are on the lowest level, which are leafs
-type IndexElement struct {
-	Values   []string
-	Position int64
-	Children map[string]*IndexElement
-}
-
 // Base struct of the MemIndex
 // It contains an element called `root` which is the starting point of the tree
 // keys contains all the keys in this index in ordered fashion
@@ -52,11 +41,11 @@ func (mi *MemIndex) newElement() (el *IndexElement) {
 
 // Add Item to the index with the position
 // return an error, if the item does not have all the keys needs by the index
-func (mi *MemIndex) AddItem(item map[string]string, position int64) (err error) {
+func (mi *MemIndex) AddItem(item map[string]string, position int64) (el *IndexElement, err error) {
 	root := mi.Root
 	lenKeys := len(mi.Keys)
 
-	el := IndexElement{}
+	el = &IndexElement{}
 	el.Values = make([]string, lenKeys)
 	el.Position = position
 
@@ -65,7 +54,7 @@ func (mi *MemIndex) AddItem(item map[string]string, position int64) (err error) 
 
 		if value == "" {
 			err = errors.New("no value for " + key)
-			return err
+			return nil, err
 		}
 
 		newRoot := root.Children[value]
@@ -83,14 +72,14 @@ func (mi *MemIndex) AddItem(item map[string]string, position int64) (err error) 
 
 	if lastValue == "" {
 		err = errors.New("no value for " + lastKey)
-		return err
+		return nil, err
 	}
 
 	el.Values[lenKeys-1] = lastValue
 
-	root.Children[lastValue] = &el
+	root.Children[lastValue] = el
 
-	return nil
+	return el, nil
 }
 
 // Get the IndexElement related to item
@@ -154,6 +143,15 @@ func (mi *MemIndex) FindElements(query map[string]string) (els []*IndexElement, 
 	els = mi.findElements(el, els)
 
 	return els, nil
+}
+
+func (mi *MemIndex) MakeQuery(el *IndexElement) (query map[string]string, err error) {
+	query = make(map[string]string)
+	for i, k := range mi.Keys {
+		query[k] = el.Values[i]
+	}
+
+	return query, nil
 }
 
 // TODO: add comment

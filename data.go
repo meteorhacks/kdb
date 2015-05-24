@@ -2,6 +2,8 @@ package kdb
 
 import (
 	"os"
+	"runtime"
+	"sync/atomic"
 )
 
 type DataOpts struct {
@@ -40,37 +42,52 @@ func NewData(opts DataOpts) (dt *Data, err error) {
 // creates a new empty record on the file and returns
 // the byte offset from the beginning of the file
 func (dt *Data) NewRecord() (o int64, err error) {
-	n, err := dt.file.WriteAt(dt.rtemp, dt.dsize)
+	o = dt.dsize
+	atomic.AddInt64(&dt.dsize, dt.rsize)
+	runtime.Gosched()
+
+	n, err := dt.file.WriteAt(dt.rtemp, o)
 	if err != nil {
 		return 0, err
 	} else if n != int(dt.rsize) {
 		return 0, ErrBytesWritten
 	}
 
-	o = dt.dsize
-	dt.dsize += dt.rsize
-
 	return o, nil
 }
 
-func (dt *Data) Read(o, l int64) (b []byte, err error) {
-	c := l * dt.opts.Size
-	b = make([]byte, c, c)
-	n, err := dt.file.ReadAt(b, o)
+// Read reads `l` number of items starting from `o` offset
+func (dt *Data) Read(o, l int64) (b [][]byte, err error) {
+	c := l * dt.opts.Size * 2
+	r := make([]byte, c, c)
+
+	n, err := dt.file.ReadAt(r, o)
 	if err != nil {
-		return b, err
+		return nil, err
 	} else if n != int(c) {
-		return b, ErrBytesWritten
+		return nil, ErrBytesWritten
+	}
+
+	b = make([][]byte, l)
+
+	var i int64
+	for i = 0; i < l; i++ {
+		b[i] = r[i*dt.opts.Size : (i+1)*dt.opts.Size]
 	}
 
 	return b, nil
 }
 
 func (dt *Data) Write(b []byte, o int64) (err error) {
+	vsize := int(dt.opts.Size)
+	if len(b) != vsize {
+		return ErrWrongValueSize
+	}
+
 	n, err := dt.file.WriteAt(b, o)
 	if err != nil {
 		return err
-	} else if n != int(dt.opts.Size) {
+	} else if n != vsize {
 		return ErrBytesWritten
 	}
 
