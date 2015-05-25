@@ -52,20 +52,6 @@ func (bk *Bucket) Write(item map[string]string, b []byte, ts int64) (err error) 
 		return err
 	}
 
-	keys := bk.Index.opts.Keys
-	req := len(keys)
-
-	// make sure item has all required keys
-	for _, k := range keys {
-		if _, ok := item[k]; ok {
-			req--
-		}
-	}
-
-	if req > 0 {
-		return ErrMissingKeyFields
-	}
-
 	// find record base els using the index
 	el, err := bk.Index.Get(item)
 	if err != nil {
