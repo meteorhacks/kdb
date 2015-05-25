@@ -9,14 +9,14 @@ import (
 // Create Index
 
 func TestCreateIndex(t *testing.T) {
-	orderedKeys := []string{"appId", "host"}
-	index := NewMemIndex(orderedKeys)
-	if !reflect.DeepEqual(index.orderedKeys, orderedKeys) {
-		t.Error("orderedKey must be set")
+	keys := []string{"appId", "host"}
+	index := NewMemIndex(keys)
+	if !reflect.DeepEqual(index.Keys, keys) {
+		t.Fatal("orderedKey must be set")
 	}
 
-	if index.root == nil {
-		t.Error("index root must be set")
+	if index.Root == nil {
+		t.Fatal("index root must be set")
 	}
 }
 
@@ -24,61 +24,61 @@ func TestCreateIndex(t *testing.T) {
 
 func TestAddItemToIndex(t *testing.T) {
 	index := NewMemIndex([]string{"appId", "host"})
-
 	item := map[string]string{"appId": "kadira", "host": "h1"}
-	var blockPosition int64 = 10
-	index.AddItem(item, blockPosition)
 
-	addedItem := index.root.Map["kadira"].Map["h1"]
+	var position int64 = 10
+	index.AddItem(item, position)
 
-	if addedItem.BlockPosition != blockPosition {
-		t.Error("block position must be present")
+	addedItem := index.Root.Children["kadira"].Children["h1"]
+
+	if addedItem.Position != position {
+		t.Fatal("block position must be present")
 	}
 
-	expectedValues := []string{"kadira", "h1"}
-	if !reflect.DeepEqual(addedItem.Values, expectedValues) {
-		t.Error("values are incorrect")
+	expected := []string{"kadira", "h1"}
+	if !reflect.DeepEqual(addedItem.Values, expected) {
+		t.Fatal("values are incorrect")
 	}
 }
 
 func TestAddItemToIndexOverride(t *testing.T) {
 	index := NewMemIndex([]string{"appId", "host"})
-
 	item := map[string]string{"appId": "kadira", "host": "h1"}
-	var blockPosition int64 = 10
-	index.AddItem(item, blockPosition)
 
-	blockPosition = 100
-	index.AddItem(item, blockPosition)
+	var position int64 = 10
+	index.AddItem(item, position)
 
-	addedItem := index.root.Map["kadira"].Map["h1"]
+	position = 100
+	index.AddItem(item, position)
 
-	if addedItem.BlockPosition != blockPosition {
-		t.Error("block position does not get overridden")
+	addedItem := index.Root.Children["kadira"].Children["h1"]
+
+	if addedItem.Position != position {
+		t.Fatal("block position does not get overridden")
 	}
 }
 
 func TestAddItemToIndexWithInsuffiecientKeys(t *testing.T) {
 	index := NewMemIndex([]string{"appId", "host"})
-
 	item := map[string]string{"appId": "kadira"}
-	var blockPosition int64 = 10
-	err := index.AddItem(item, blockPosition)
+
+	var position int64 = 10
+	_, err := index.AddItem(item, position)
 
 	if err == nil {
-		t.Error("need to have an error", err)
+		t.Fatal("need to have an error", err)
 	}
 }
 
 func TestAddItemToIndexWithNoKeys(t *testing.T) {
 	index := NewMemIndex([]string{"appId", "host"})
-
 	item := map[string]string{}
-	var blockPosition int64 = 10
-	err := index.AddItem(item, blockPosition)
+
+	var position int64 = 10
+	_, err := index.AddItem(item, position)
 
 	if err == nil {
-		t.Error("need to have an error", err)
+		t.Fatal("need to have an error", err)
 	}
 }
 
@@ -86,58 +86,58 @@ func TestAddItemToIndexWithNoKeys(t *testing.T) {
 
 func TestGetElement(t *testing.T) {
 	index := NewMemIndex([]string{"appId", "host"})
-
 	item := map[string]string{"appId": "kadira", "host": "h1"}
-	var blockPosition int64 = 10
-	index.AddItem(item, blockPosition)
 
-	_, addedItem := index.GetElement(item)
+	var position int64 = 10
+	index.AddItem(item, position)
+
+	addedItem, _ := index.GetElement(item)
 
 	if addedItem == nil {
-		t.Error("couldn't get the added item")
+		t.Fatal("couldn't get the added item")
 	}
 
-	if addedItem.BlockPosition != blockPosition {
-		t.Error("block position must be present")
+	if addedItem.Position != position {
+		t.Fatal("block position must be present")
 	}
 
 	expectedValues := []string{"kadira", "h1"}
 	if !reflect.DeepEqual(addedItem.Values, expectedValues) {
-		t.Error("values are incorrect")
+		t.Fatal("values are incorrect")
 	}
 }
 
 func TestGetElementNoSuchElement(t *testing.T) {
 	index := NewMemIndex([]string{"appId", "host"})
-
 	item := map[string]string{"appId": "kadira", "host": "h1"}
-	var blockPosition int64 = 10
-	index.AddItem(item, blockPosition)
+
+	var position int64 = 10
+	index.AddItem(item, position)
 
 	nonExistingEl := map[string]string{"appId": "kadira", "host": "h2"}
-	err, addedItem := index.GetElement(nonExistingEl)
+	addedItem, err := index.GetElement(nonExistingEl)
 
 	if err != nil {
-		t.Error("cannot have a error")
+		t.Fatal("cannot have a error")
 	}
 
 	if addedItem != nil {
-		t.Error("cannot have element")
+		t.Fatal("cannot have element")
 	}
 }
 
 func TestGetElementInsufficientKeys(t *testing.T) {
 	index := NewMemIndex([]string{"appId", "host"})
-
 	item := map[string]string{"appId": "kadira", "host": "h1"}
-	var blockPosition int64 = 10
-	index.AddItem(item, blockPosition)
+
+	var position int64 = 10
+	index.AddItem(item, position)
 
 	query := map[string]string{"appId": "kadira"}
-	err, _ := index.GetElement(query)
+	_, err := index.GetElement(query)
 
 	if err == nil {
-		t.Error("need to have an error")
+		t.Fatal("need to have an error")
 	}
 }
 
@@ -145,19 +145,19 @@ func TestGetElementInsufficientKeys(t *testing.T) {
 
 func TestFindElementsInBottom(t *testing.T) {
 	index := NewMemIndex([]string{"appId", "host"})
-
 	item := map[string]string{"appId": "kadira", "host": "h1"}
-	var blockPosition int64 = 10
-	index.AddItem(item, blockPosition)
 
-	_, elements := index.FindElements(item)
+	var position int64 = 10
+	index.AddItem(item, position)
+
+	elements, _ := index.FindElements(item)
 
 	if len(elements) != 1 {
-		t.Error("could not find the element")
+		t.Fatal("could not find the element")
 	}
 
-	if elements[0].BlockPosition != blockPosition {
-		t.Error("found the wrong element")
+	if elements[0].Position != position {
+		t.Fatal("found the wrong element")
 	}
 }
 
@@ -167,19 +167,19 @@ func TestFindElementsInMiddleRoot(t *testing.T) {
 	index.AddItem(map[string]string{"appId": "kadira", "host": "h2"}, 20)
 	index.AddItem(map[string]string{"appId": "some-other", "host": "h2"}, 20)
 
-	_, elements := index.FindElements(map[string]string{"appId": "kadira"})
+	elements, _ := index.FindElements(map[string]string{"appId": "kadira"})
 
 	if len(elements) != 2 {
-		t.Error("could not find the element")
+		t.Fatal("could not find the element")
 	}
 
-	blockPositions := make([]int64, len(elements))
+	positions := make([]int64, len(elements))
 	for lc, el := range elements {
-		blockPositions[lc] = el.BlockPosition
+		positions[lc] = el.Position
 	}
 
-	if !reflect.DeepEqual(blockPositions, []int64{10, 20}) {
-		t.Error("found wrong elements")
+	if !reflect.DeepEqual(positions, []int64{10, 20}) {
+		t.Fatal("found wrong elements")
 	}
 }
 
@@ -190,20 +190,20 @@ func TestFindElementsInTopLevel(t *testing.T) {
 	index.AddItem(map[string]string{"appId": "some-other", "host": "h2"}, 30)
 	index.AddItem(map[string]string{"appId": "coolio", "host": "h2"}, 40)
 
-	_, elements := index.FindElements(map[string]string{})
+	elements, _ := index.FindElements(map[string]string{})
 
 	if len(elements) != 4 {
-		t.Error("could not find the element")
+		t.Fatal("could not find the element")
 	}
 
-	blockPositions := make([]int, len(elements))
+	positions := make([]int, len(elements))
 	for lc, el := range elements {
-		blockPositions[lc] = int(el.BlockPosition)
+		positions[lc] = int(el.Position)
 	}
 
-	sort.Ints(blockPositions)
+	sort.Ints(positions)
 
-	if !reflect.DeepEqual(blockPositions, []int{10, 20, 30, 40}) {
-		t.Error("found wrong elements", blockPositions)
+	if !reflect.DeepEqual(positions, []int{10, 20, 30, 40}) {
+		t.Fatal("found wrong elements", positions)
 	}
 }
