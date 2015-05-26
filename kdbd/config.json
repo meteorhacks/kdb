@@ -1,0 +1,10 @@
+{
+  "databaseName": "test",
+  "dataPath": "/tmp/data/",
+  "partitions": 4,
+  "indexDepth": 4,
+  "payloadSize": 16,
+  "bucketSize": 86400000000000,
+  "resolution": 60000000000,
+  "ddpAddress": ":3000"
+}
