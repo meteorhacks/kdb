@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"os"
 	"runtime"
 	"sync"
@@ -44,11 +43,8 @@ type MemIndex struct {
 }
 
 func NewMemIndex(opts MemIndexOpts) (idx *MemIndex, err error) {
-	log.Print("MemIndex: loading index file for partition: ", opts.PartitionNo)
-
 	file, err := os.OpenFile(opts.FilePath, MemIndexFMode, MemIndexFPerms)
 	if err != nil {
-		log.Print("MemIndex: could not open memindex file: ", opts.FilePath)
 		return nil, err
 	}
 
@@ -75,7 +71,6 @@ func NewMemIndex(opts MemIndexOpts) (idx *MemIndex, err error) {
 		if err = decd.Decode(el); err == io.EOF {
 			break
 		} else if err != nil {
-			log.Print("MemIndex: error while decoding index value from file", opts.FilePath)
 			return nil, err
 		}
 
