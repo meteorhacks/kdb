@@ -79,11 +79,6 @@ func NewMemIndex(opts MemIndexOpts) (idx *MemIndex, err error) {
 			return nil, err
 		}
 
-		if idx.root == nil {
-			idx.root = el
-			continue
-		}
-
 		if err = idx.add(el); err != nil {
 			return nil, err
 		}
@@ -97,41 +92,40 @@ func (idx *MemIndex) NewIndexElement(vals []string) (el *IndexElement, err error
 	el.Children = make(map[string]*IndexElement)
 	el.Values = vals
 
-	idx.mutex.Lock()
-	offset := idx.fsize
-
 	idx.buff.Reset()
 	encd := json.NewEncoder(idx.buff)
 
 	err = encd.Encode(el)
 	if err != nil {
-		idx.mutex.Unlock()
-		runtime.Gosched()
 		return nil, err
 	}
 
 	data := idx.buff.Bytes()
 	elSize := len(data)
 
+	idx.mutex.Lock()
+	offset := idx.fsize
+
 	n, err := idx.file.WriteAt(data, offset)
-	if err != nil {
-		idx.mutex.Unlock()
-		runtime.Gosched()
-		return nil, err
-	} else if n != elSize {
-		idx.mutex.Unlock()
-		runtime.Gosched()
-		return nil, ErrMemIndexBytesWritten
+	if err == nil && n != elSize {
+		err = ErrMemIndexBytesWritten
 	}
 
-	idx.fsize += int64(elSize)
+	if err == nil {
+		idx.fsize += int64(elSize)
+	}
+
 	idx.mutex.Unlock()
 	runtime.Gosched()
+
+	if err != nil {
+		return nil, err
+	}
 
 	return el, nil
 }
 
-// Add Item to the index with the position
+// Add Item to the index with provided record position
 func (idx *MemIndex) Add(vals []string, rpos int64) (el *IndexElement, err error) {
 	el, err = idx.NewIndexElement(vals)
 	if err != nil {
