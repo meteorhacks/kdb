@@ -2,7 +2,10 @@ package kdb
 
 import (
 	"io/ioutil"
+	"math/rand"
 	"os"
+	"reflect"
+	"strconv"
 	"testing"
 )
 
@@ -55,7 +58,30 @@ func TestMemIndexNewIndexElement(t *testing.T) {
 }
 
 func TestMemIndexAdd(t *testing.T) {
-	// TODO
+	fpath := "/tmp/i1"
+	defer os.Remove(fpath)
+
+	idx, err := NewMemIndex(MemIndexOpts{
+		FilePath:   fpath,
+		IndexDepth: 4,
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vals := []string{"a", "b", "c", "d"}
+	el, err := idx.Add(vals, 100)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if el == nil || len(el.Children) != 0 ||
+		!reflect.DeepEqual(el.Values, vals) ||
+		el != idx.root.Children["a"].Children["b"].Children["c"].Children["d"] {
+		t.Fatal("should return a valid element")
+	}
 }
 
 func TestMemIndexGet(t *testing.T) {
@@ -64,4 +90,34 @@ func TestMemIndexGet(t *testing.T) {
 
 func TestMemIndexFind(t *testing.T) {
 	// TODO
+}
+
+func BenchmarkMemIndexAdd(b *testing.B) {
+	fpath := "/tmp/i1"
+	defer os.Remove(fpath)
+
+	idx, err := NewMemIndex(MemIndexOpts{
+		FilePath:   fpath,
+		IndexDepth: 4,
+	})
+
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	baseVals := []string{"a", "b", "c", "d"}
+
+	for i := 0; i < b.N; i++ {
+		vals := baseVals
+		r := rand.Intn(10)
+		vals[i%4] = vals[i%4] + strconv.Itoa(r)
+
+		b.StartTimer()
+		_, err := idx.Add(vals, 100)
+		b.StopTimer()
+
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
 }
