@@ -117,6 +117,33 @@ func TestNewFixedBlockCorruptFile(t *testing.T) {
 	}
 }
 
+func TestFixedBlockNewRecord(t *testing.T) {
+	fpath := "/tmp/b1"
+	defer os.Remove(fpath)
+
+	blk, err := NewFixedBlock(FixedBlockOpts{
+		FilePath:     fpath,
+		PayloadSize:  4,
+		PayloadCount: 10,
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if blk != nil {
+		defer blk.Close()
+	}
+
+	for i := 0; i < 5; i++ {
+		if rpos, err := blk.NewRecord(); err != nil {
+			t.Fatal(err)
+		} else if rpos != int64(i) {
+			t.Fatal("incorrect rpos")
+		}
+	}
+}
+
 // test a Put request by first writing data with Put and reading it
 // value read later must match value written using Put
 // this also confirms that the value is written at correct position
@@ -252,6 +279,31 @@ func TestFixedBlockGet(t *testing.T) {
 
 	if string(res[0]) != "asdf" || string(res[1]) != "ghjk" {
 		t.Fatal("invalid data")
+	}
+}
+
+func BenchmarkFixedBlockNewRecord(b *testing.B) {
+	fpath := "/tmp/b1"
+	defer os.Remove(fpath)
+
+	blk, err := NewFixedBlock(FixedBlockOpts{
+		FilePath:     fpath,
+		PayloadSize:  16,
+		PayloadCount: 1000,
+	})
+
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	if blk != nil {
+		defer blk.Close()
+	}
+
+	for i := 0; i < b.N; i++ {
+		if _, err := blk.NewRecord(); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
