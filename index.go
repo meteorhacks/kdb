@@ -13,7 +13,7 @@ type Index interface {
 // `Children` is  only available in root and intermediate nodes
 // All the data elements are on the lowest level, which are leaf nodes
 type IndexElement struct {
-	Values   []string                 `json:"values"`
-	Position int64                    `json:"position"`
-	Children map[string]*IndexElement `json:"-"`
+	Values   []string                 `gob:"values"`
+	Position int64                    `gob:"position"`
+	Children map[string]*IndexElement `gob:"-"`
 }

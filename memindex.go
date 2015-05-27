@@ -2,7 +2,7 @@ package kdb
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/gob"
 	"errors"
 	"io"
 	"os"
@@ -38,7 +38,7 @@ type MemIndex struct {
 	root  *IndexElement // root element of the index tree
 	file  *os.File      // file used to store index nodes
 	fsize int64         // file size (offset to place next index)
-	buff  *bytes.Buffer // to temporarily store json data
+	buff  *bytes.Buffer // to temporarily store gob data
 	mutex *sync.Mutex
 }
 
@@ -54,7 +54,7 @@ func NewMemIndex(opts MemIndexOpts) (idx *MemIndex, err error) {
 	}
 
 	fsize := finfo.Size()
-	decd := json.NewDecoder(file)
+	decd := gob.NewDecoder(file)
 	mutex := &sync.Mutex{}
 	buff := new(bytes.Buffer)
 
@@ -64,7 +64,7 @@ func NewMemIndex(opts MemIndexOpts) (idx *MemIndex, err error) {
 	idx.root.Children = make(map[string]*IndexElement)
 
 	// decode index elements one by one from the index file
-	// index file has json encoded
+	// index file has gob encoded
 	for {
 		el := &IndexElement{}
 
@@ -88,7 +88,7 @@ func (idx *MemIndex) NewIndexElement(vals []string) (el *IndexElement, err error
 	el.Values = vals
 
 	idx.buff.Reset()
-	encd := json.NewEncoder(idx.buff)
+	encd := gob.NewEncoder(idx.buff)
 
 	err = encd.Encode(el)
 	if err != nil {
