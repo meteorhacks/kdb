@@ -1,23 +1,27 @@
 package kdb
 
 import (
-	"bytes"
-	"encoding/gob"
+	"encoding/binary"
 	"errors"
-	"io"
+	"io/ioutil"
 	"os"
 	"runtime"
 	"sync"
 )
 
 const (
-	MemIndexFMode  = os.O_CREATE | os.O_RDWR
-	MemIndexFPerms = 0644
+	MemIndexFMode        = os.O_CREATE | os.O_RDWR
+	MemIndexFPerms       = 0644
+	MemIndexElHeaderSize = 8
+	MemIndexPaddingSize  = 4
 )
 
 var (
-	ErrMemIndexIncorrectDepth = errors.New("incorrect number of values")
-	ErrMemIndexBytesWritten   = errors.New("incorrect number of bytes written to index file")
+	MemIndexPadding                 = []byte{0, 0, 0, 0}
+	ErrMemIndexBytesWrittenToFile   = errors.New("incorrect number of bytes written to index file")
+	ErrMemIndexBytesWrittenToBuffer = errors.New("incorrect number of bytes written to temporary buffer")
+	ErrMemIndexBytesReadFromFile    = errors.New("incorrect number of bytes read from index file")
+	ErrMemIndexBytesReadFromBuffer  = errors.New("incorrect number of bytes read from temporary buffer")
 )
 
 type MemIndexOpts struct {
@@ -38,7 +42,6 @@ type MemIndex struct {
 	root  *IndexElement // root element of the index tree
 	file  *os.File      // file used to store index nodes
 	fsize int64         // file size (offset to place next index)
-	buff  *bytes.Buffer // to temporarily store gob data
 	mutex *sync.Mutex
 }
 
@@ -48,118 +51,45 @@ func NewMemIndex(opts MemIndexOpts) (idx *MemIndex, err error) {
 		return nil, err
 	}
 
+	root := &IndexElement{
+		Children: make(map[string]*IndexElement),
+	}
+
 	finfo, err := file.Stat()
 	if err != nil {
 		return nil, err
 	}
 
 	fsize := finfo.Size()
-	decd := gob.NewDecoder(file)
 	mutex := &sync.Mutex{}
-	buff := new(bytes.Buffer)
 
-	idx = &MemIndex{opts, nil, file, fsize, buff, mutex}
+	idx = &MemIndex{opts, root, file, fsize, mutex}
 
-	idx.root = &IndexElement{}
-	idx.root.Children = make(map[string]*IndexElement)
-
-	// decode index elements one by one from the index file
-	// index file has gob encoded
-	for {
-		el := &IndexElement{}
-
-		if err = decd.Decode(el); err == io.EOF {
-			break
-		} else if err != nil {
-			return nil, err
-		}
-
-		if err = idx.add(el); err != nil {
-			return nil, err
-		}
+	if fsize > 0 {
+		idx.load()
 	}
 
 	return idx, nil
 }
 
-func (idx *MemIndex) NewIndexElement(vals []string) (el *IndexElement, err error) {
-	el = &IndexElement{}
-	el.Children = make(map[string]*IndexElement)
-	el.Values = vals
-
-	idx.buff.Reset()
-	encd := gob.NewEncoder(idx.buff)
-
-	err = encd.Encode(el)
-	if err != nil {
-		return nil, err
-	}
-
-	data := idx.buff.Bytes()
-	elSize := len(data)
-
-	idx.mutex.Lock()
-	offset := idx.fsize
-
-	n, err := idx.file.WriteAt(data, offset)
-	if err == nil && n != elSize {
-		err = ErrMemIndexBytesWritten
-	}
-
-	if err == nil {
-		idx.fsize += int64(elSize)
-	}
-
-	idx.mutex.Unlock()
-	runtime.Gosched()
-
-	if err != nil {
-		return nil, err
-	}
-
-	return el, nil
-}
-
 // Add Item to the index with provided record position
 func (idx *MemIndex) Add(vals []string, rpos int64) (el *IndexElement, err error) {
-	el, err = idx.NewIndexElement(vals)
+	el = &IndexElement{
+		Position: rpos,
+		Values:   vals,
+	}
+
+	err = idx.addElement(el)
 	if err != nil {
 		return nil, err
 	}
 
-	el.Values = vals
-	el.Position = rpos
-
-	err = idx.add(el)
+	err = idx.saveElement(el)
 	if err != nil {
 		return nil, err
 	}
 
 	return el, nil
-}
-
-// add IndexElement
-func (idx *MemIndex) add(el *IndexElement) (err error) {
-	root := idx.root
-	tempVals := make([]string, 4)
-
-	for i, v := range el.Values[0 : idx.IndexDepth-1] {
-		newRoot, ok := root.Children[v]
-		tempVals[i] = v
-
-		if !ok {
-			newRoot = &IndexElement{}
-			newRoot.Children = make(map[string]*IndexElement)
-			root.Children[v] = newRoot
-		}
-
-		root = newRoot
-	}
-
-	lastValue := el.Values[idx.IndexDepth-1]
-	root.Children[lastValue] = el
-
-	return nil
 }
 
 // Get the IndexElement for given set of values
@@ -197,9 +127,77 @@ func (idx *MemIndex) Find(vals []string) (els []*IndexElement, err error) {
 	return els, nil
 }
 
+// close the file handler
+func (idx *MemIndex) Close() (err error) {
+	err = idx.file.Close()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// loads index data from a file containing protobuf encoded index elements
+// TODO: handle corrupt index files (load valid index points)
+func (idx *MemIndex) load() (err error) {
+	idxEl := MemIndexElement{}
+
+	data, err := ioutil.ReadAll(idx.file)
+	if err != nil {
+		return err
+	}
+
+	dataSize := int64(len(data))
+	var offset int64 = 0
+
+	// decode index elements one by one from the index file
+	for {
+		if offset == dataSize {
+			break
+		}
+
+		// reset `idxEl` struct values
+		// reuse to avoid memory allocations
+		idxEl.Position = nil
+		idxEl.Values = nil
+
+		// read element header (element size as int64) from data
+		sizeData := data[offset : offset+MemIndexElHeaderSize]
+
+		idxElSize, n := binary.Varint(sizeData)
+
+		if n <= 0 {
+			return ErrMemIndexBytesReadFromBuffer
+		}
+
+		// read encoded element and Unmarshal it
+		idxElData := data[offset+MemIndexElHeaderSize : offset+MemIndexElHeaderSize+idxElSize]
+
+		err = idxEl.Unmarshal(idxElData)
+		if err != nil {
+
+			return err
+		}
+
+		// set offset to point to the end of bytes already read
+		offset += MemIndexElHeaderSize + idxElSize + MemIndexPaddingSize
+
+		el := &IndexElement{
+			Position: *idxEl.Position,
+			Values:   idxEl.Values,
+		}
+
+		if err = idx.addElement(el); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // recursively go through all tree branches and collect leaf nodes
 func (idx *MemIndex) find(root *IndexElement, els []*IndexElement) []*IndexElement {
-	if len(root.Children) == 0 {
+	if root.Children == nil {
 		return append(els, root)
 	}
 
@@ -210,11 +208,72 @@ func (idx *MemIndex) find(root *IndexElement, els []*IndexElement) []*IndexEleme
 	return els
 }
 
-// close the file handler
-func (idx *MemIndex) Close() (err error) {
-	err = idx.file.Close()
+// add IndexElement to the tree
+func (idx *MemIndex) addElement(el *IndexElement) (err error) {
+	root := idx.root
+	tempVals := make([]string, 4)
+
+	for i, v := range el.Values[0 : idx.IndexDepth-1] {
+		newRoot, ok := root.Children[v]
+		tempVals[i] = v
+
+		if !ok {
+			newRoot = &IndexElement{}
+			newRoot.Children = make(map[string]*IndexElement)
+			root.Children[v] = newRoot
+		}
+
+		root = newRoot
+	}
+
+	lastValue := el.Values[idx.IndexDepth-1]
+	root.Children[lastValue] = el
+
+	return nil
+}
+
+// Element is saved in format [size element padding]
+func (idx *MemIndex) saveElement(el *IndexElement) (err error) {
+	mel := MemIndexElement{
+		Position: &el.Position,
+		Values:   el.Values,
+	}
+
+	elementSize := mel.Size()
+	totalSize := MemIndexElHeaderSize + elementSize + MemIndexPaddingSize
+	data := make([]byte, totalSize, totalSize)
+
+	// add the element header (int64 of element size)
+	binary.PutVarint(data, int64(elementSize))
+
+	// add the protobuffer encoded element to the payload
+	elData := data[MemIndexElHeaderSize : MemIndexElHeaderSize+elementSize]
+	n, err := mel.MarshalTo(elData)
 	if err != nil {
 		return err
+	} else if n != elementSize {
+		return ErrMemIndexBytesWrittenToBuffer
+	}
+
+	// add the padding at the end of the payload
+	copy(data[MemIndexElHeaderSize+elementSize:], MemIndexPadding)
+
+	// finally, write the payload to the file
+	idx.mutex.Lock()
+	offset := idx.fsize
+
+	n, err = idx.file.WriteAt(data, offset)
+	if err == nil && n == totalSize {
+		idx.fsize += int64(totalSize)
+	}
+
+	idx.mutex.Unlock()
+	runtime.Gosched()
+
+	if err != nil {
+		return err
+	} else if n != totalSize {
+		return ErrMemIndexBytesWrittenToFile
 	}
 
 	return nil

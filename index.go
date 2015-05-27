@@ -1,7 +1,6 @@
 package kdb
 
 type Index interface {
-	NewIndexElement(vals []string) (el *IndexElement, err error)
 	Add(vals []string, rpos int64) (el *IndexElement, err error)
 	Get(vals []string) (el *IndexElement, err error)
 	Find(vals []string) (els []*IndexElement, err error)

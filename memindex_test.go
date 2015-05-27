@@ -46,14 +46,41 @@ func TestNewMemIndexNewFile(t *testing.T) {
 }
 
 func TestNewMemIndexExistingFile(t *testing.T) {
-	// TODO
+	fpath := "/tmp/i1"
+	defer os.Remove(fpath)
+
+	idx, err := NewMemIndex(MemIndexOpts{
+		FilePath:   fpath,
+		IndexDepth: 4,
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vals := []string{"a", "b", "c", "d"}
+	el, err := idx.Add(vals, 100)
+
+	idx.Close()
+
+	idx2, err := NewMemIndex(MemIndexOpts{
+		FilePath:   fpath,
+		IndexDepth: 4,
+	})
+
+	el2, err := idx2.Get(vals)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if el.Position != el2.Position ||
+		!reflect.DeepEqual(el.Values, el2.Values) {
+		t.Fatal("should return a valid element")
+	}
 }
 
 func TestNewMemIndexCorruptFile(t *testing.T) {
-	// TODO
-}
-
-func TestMemIndexNewIndexElement(t *testing.T) {
 	// TODO
 }
 
