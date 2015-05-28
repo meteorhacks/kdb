@@ -3,10 +3,10 @@ package kdb
 import (
 	"encoding/binary"
 	"errors"
-	"io/ioutil"
 	"os"
 	"runtime"
 	"sync"
+	"syscall"
 )
 
 const (
@@ -14,6 +14,7 @@ const (
 	MemIndexFPerms       = 0644
 	MemIndexElHeaderSize = 8
 	MemIndexPaddingSize  = 4
+	PreAllocateSize      = 1024 * 1024 * 10 // 10 Mb pre allocation
 )
 
 var (
@@ -39,10 +40,13 @@ type MemIndexOpts struct {
 // `root` is the starting point of the tree
 type MemIndex struct {
 	MemIndexOpts
-	root  *IndexElement // root element of the index tree
-	file  *os.File      // file used to store index nodes
-	fsize int64         // file size (offset to place next index)
-	mutex *sync.Mutex
+	root            *IndexElement // root element of the index tree
+	file            *os.File      // file used to store index nodes
+	currentFileSize int64         // file size (offset to place next index)
+	totalFileSize   int64         // total file of the file
+	mmapedData      []byte        // mmaped file data
+	mmapedOffset    int64         // offset of the mmap
+	mutex           *sync.Mutex
 }
 
 func NewMemIndex(opts MemIndexOpts) (idx *MemIndex, err error) {
@@ -60,15 +64,17 @@ func NewMemIndex(opts MemIndexOpts) (idx *MemIndex, err error) {
 		return nil, err
 	}
 
-	fsize := finfo.Size()
+	currentFileSize := finfo.Size()
+	totalFileSize := finfo.Size()
+	mmapedOffset := int64(0)
+	mmapedData := make([]byte, 0)
+
 	mutex := &sync.Mutex{}
 
-	idx = &MemIndex{opts, root, file, fsize, mutex}
+	idx = &MemIndex{opts, root, file, currentFileSize, totalFileSize, mmapedData, mmapedOffset, mutex}
 
-	if fsize > 0 {
-		if err := idx.load(); err != nil {
-			return nil, err
-		}
+	if err := idx.load(); err != nil {
+		return nil, err
 	}
 
 	return idx, nil
@@ -160,6 +166,11 @@ func (idx *MemIndex) Close() (err error) {
 		return err
 	}
 
+	err = syscall.Munmap(idx.mmapedData)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -168,11 +179,12 @@ func (idx *MemIndex) Close() (err error) {
 func (idx *MemIndex) load() (err error) {
 	idxEl := MemIndexElement{}
 
-	data, err := ioutil.ReadAll(idx.file)
+	err = idx.loadData(0, idx.totalFileSize)
 	if err != nil {
 		return err
 	}
 
+	data := idx.mmapedData
 	dataSize := int64(len(data))
 	var offset int64 = 0
 
@@ -197,11 +209,18 @@ func (idx *MemIndex) load() (err error) {
 		}
 
 		// read encoded element and Unmarshal it
-		idxElData := data[offset+MemIndexElHeaderSize : offset+MemIndexElHeaderSize+idxElSize]
+		start := offset + MemIndexElHeaderSize
+		end := start + idxElSize
+		if end > idx.totalFileSize {
+			return errors.New("data size is too small to filled into protobuf")
+		}
+
+		idxElData := data[start:end]
 
 		err = idxEl.Unmarshal(idxElData)
+		// we've reached to the end of the data
 		if err != nil {
-			return err
+			break
 		}
 
 		// set offset to point to the end of bytes already read
@@ -215,6 +234,13 @@ func (idx *MemIndex) load() (err error) {
 		if err = idx.addElement(el); err != nil {
 			return err
 		}
+	}
+
+	idx.currentFileSize = offset
+
+	err = idx.preAllocateIfNeeded(0)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -265,7 +291,7 @@ func (idx *MemIndex) saveElement(el *IndexElement) (err error) {
 	}
 
 	elementSize := mel.Size()
-	totalSize := MemIndexElHeaderSize + elementSize + MemIndexPaddingSize
+	totalSize := int64(MemIndexElHeaderSize + elementSize + MemIndexPaddingSize)
 	data := make([]byte, totalSize, totalSize)
 
 	// add the element header (int64 of element size)
@@ -283,23 +309,78 @@ func (idx *MemIndex) saveElement(el *IndexElement) (err error) {
 	// add the padding at the end of the payload
 	copy(data[MemIndexElHeaderSize+elementSize:], MemIndexPadding)
 
-	// finally, write the payload to the file
-	idx.mutex.Lock()
-	offset := idx.fsize
+	idx.preAllocateIfNeeded(totalSize)
 
-	n, err = idx.file.WriteAt(data, offset)
-	if err == nil && n == totalSize {
-		idx.fsize += int64(totalSize)
+	// finally, write the payload to the file
+	offset := idx.currentFileSize
+	idx.mutex.Lock()
+
+	var lc int64 = 0
+	for lc = 0; lc < int64(len(data)); lc++ {
+		// We may read from a different offset and didn't start from the begining
+		// In that case, we need to reduce the mmap starting point from the offset
+		pos := offset + lc - idx.mmapedOffset
+		idx.mmapedData[pos] = data[lc]
 	}
 
+	idx.currentFileSize += totalSize
 	idx.mutex.Unlock()
 	runtime.Gosched()
 
-	if err != nil {
-		return err
-	} else if n != totalSize {
-		return ErrMemIndexBytesWrittenToFile
+	return nil
+}
+
+func (idx *MemIndex) preAllocateIfNeeded(sizeNeedToWrite int64) (err error) {
+	excessBytes := idx.totalFileSize - idx.currentFileSize
+	if excessBytes <= sizeNeedToWrite {
+		// let's allocate some bytes
+		allocateAmount := PreAllocateSize - excessBytes
+		emptyBytes := make([]byte, allocateAmount)
+
+		idx.mutex.Lock()
+		// let's unmap the previous mapped data
+		syscall.Munmap(idx.mmapedData)
+
+		_, err := idx.file.WriteAt(emptyBytes, idx.currentFileSize)
+		if err != nil {
+			return err
+		}
+		idx.mutex.Unlock()
+
+		// let's allocate again
+		idx.totalFileSize += allocateAmount
+
+		// TODO: right now we need to start from 0 to read even we are appending
+		// reading from random places works well in OSX. But on linux, we need
+		// to set on the offset into a multiple of page size
+		// We can implement it, but it's pretty okay to start allocating
+		// from the beginning
+		idx.loadData(0, idx.totalFileSize)
 	}
 
+	return nil
+}
+
+func (idx *MemIndex) loadData(start, end int64) (err error) {
+	fd := int(idx.file.Fd())
+	length := end - start
+	prot := syscall.PROT_READ | syscall.PROT_WRITE
+	flags := syscall.MAP_SHARED
+
+	// if there is no data, we can't mmap
+	if length == 0 {
+		idx.mmapedData = make([]byte, 0)
+		idx.mmapedOffset = 0
+		return nil
+	}
+
+	// mmap the data
+	data, err := syscall.Mmap(fd, start, int(length), prot, flags)
+	if err != nil {
+		return err
+	}
+
+	idx.mmapedData = data
+	idx.mmapedOffset = start
 	return nil
 }
