@@ -66,7 +66,9 @@ func NewMemIndex(opts MemIndexOpts) (idx *MemIndex, err error) {
 	idx = &MemIndex{opts, root, file, fsize, mutex}
 
 	if fsize > 0 {
-		idx.load()
+		if err := idx.load(); err != nil {
+			return nil, err
+		}
 	}
 
 	return idx, nil
@@ -123,8 +125,20 @@ func (idx *MemIndex) Find(vals []string) (els []*IndexElement, err error) {
 	}
 
 	els = idx.find(root, els)
+	filtered := els[:0]
 
-	return els, nil
+outer:
+	for _, el := range els {
+		for j, _ := range vals {
+			if vals[j] != "" && vals[j] != el.Values[j] {
+				continue outer
+			}
+		}
+
+		filtered = append(filtered, el)
+	}
+
+	return filtered, nil
 }
 
 // close the file handler
@@ -175,7 +189,6 @@ func (idx *MemIndex) load() (err error) {
 
 		err = idxEl.Unmarshal(idxElData)
 		if err != nil {
-
 			return err
 		}
 
