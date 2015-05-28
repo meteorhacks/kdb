@@ -114,8 +114,16 @@ func (idx *MemIndex) Find(vals []string) (els []*IndexElement, err error) {
 	root := idx.root
 	var ok bool
 
-	for _, v := range vals {
+	needsFilter := false
+
+	for j, v := range vals {
 		if v == "" {
+			for i := len(vals) - 1; i >= j; i-- {
+				if vals[i] != "" {
+					needsFilter = true
+				}
+			}
+
 			break
 		}
 
@@ -125,6 +133,10 @@ func (idx *MemIndex) Find(vals []string) (els []*IndexElement, err error) {
 	}
 
 	els = idx.find(root, els)
+	if !needsFilter {
+		return els, nil
+	}
+
 	filtered := els[:0]
 
 outer:
