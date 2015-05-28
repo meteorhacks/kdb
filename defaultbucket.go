@@ -1,6 +1,9 @@
 package kdb
 
-import "strconv"
+import (
+	"path"
+	"strconv"
+)
 
 type DefaultBucketOpts struct {
 	// database name. Currently only used with naming files
@@ -37,9 +40,13 @@ type DefaultBucket struct {
 }
 
 func NewDefaultBucket(opts DefaultBucketOpts) (bkt *DefaultBucket, err error) {
+	// a map of partition number to indexes
 	idxs := make([]Index, opts.Partitions)
-	baseTimeStr := strconv.Itoa(int(opts.BaseTime))
-	basePath := opts.DataPath + opts.DatabaseName + "_" + baseTimeStr
+
+	basePath := path.Join(
+		opts.DataPath,
+		opts.DatabaseName+"_"+strconv.Itoa(int(opts.BaseTime)),
+	)
 
 	var pno int64
 	for pno = 0; pno < opts.Partitions; pno++ {
@@ -101,8 +108,7 @@ func (bkt *DefaultBucket) Put(ts, pno int64, vals []string, pld []byte) (err err
 		}
 	}
 
-	var ppos int64
-	ppos = (ts % bkt.BucketSize) / bkt.Resolution
+	ppos := bkt.tsToPPos(ts)
 
 	err = bkt.block.Put(rpos, ppos, pld)
 	if err != nil {
@@ -110,4 +116,49 @@ func (bkt *DefaultBucket) Put(ts, pno int64, vals []string, pld []byte) (err err
 	}
 
 	return nil
+}
+
+// Get method gets the payload for matching value set
+func (bkt *DefaultBucket) Get(pno, start, end int64, vals []string) (res [][]byte, err error) {
+	index := bkt.indexes[pno]
+
+	el, err := index.Get(vals)
+	if err != nil {
+		return nil, err
+	}
+
+	spos := bkt.tsToPPos(start)
+	epos := bkt.tsToPPos(end)
+	res, err = bkt.block.Get(el.Position, spos, epos)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+// Find method finds all payloads matching the given query
+func (bkt *DefaultBucket) Find(pno, start, end int64, vals []string) (res map[*IndexElement][][]byte, err error) {
+	res = make(map[*IndexElement][][]byte)
+
+	index := bkt.indexes[pno]
+	els, err := index.Find(vals)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, el := range els {
+		spos := bkt.tsToPPos(start)
+		epos := bkt.tsToPPos(end)
+		res[el], err = bkt.block.Get(el.Position, spos, epos)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return res, nil
+}
+
+func (bkt *DefaultBucket) tsToPPos(ts int64) (pos int64) {
+	return (ts % bkt.BucketSize) / bkt.Resolution
 }
