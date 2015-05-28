@@ -39,8 +39,8 @@ func TestNewMemIndexNewFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if string(data) != "" {
-		t.Fatal("initially index should be empty")
+	if len(data) != PreAllocateSize {
+		t.Fatal("initially index should be pre-allocated")
 	}
 }
 
