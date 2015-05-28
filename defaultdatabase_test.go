@@ -199,6 +199,99 @@ func TestDefaultDatabaseGet(t *testing.T) {
 	}
 }
 
+func TestDefaultDatabaseFind(t *testing.T) {
+	files := []string{
+		"/tmp/test_0.block",
+		"/tmp/test_0_0.index",
+		"/tmp/test_0_1.index",
+		"/tmp/test_0_2.index",
+		"/tmp/test_0_3.index",
+		"/tmp/test_100.block",
+		"/tmp/test_100_0.index",
+		"/tmp/test_100_1.index",
+		"/tmp/test_100_2.index",
+		"/tmp/test_100_3.index",
+	}
+
+	for _, f := range files {
+		defer os.Remove(f)
+	}
+
+	db, err := NewDefaultDatabase(DefaultDatabaseOpts{
+		DatabaseName:   "test",
+		DataPath:       "/tmp/",
+		Partitions:     4,
+		IndexDepth:     4,
+		PayloadSize:    4,
+		BucketDuration: 100,
+		Resolution:     10,
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vals := []string{"a", "b", "c", ""}
+	val1 := []string{"a", "b", "c", "d"}
+	val2 := []string{"a", "b", "c", "e"}
+	pld0 := []byte{0, 0, 0, 0}
+	pld1 := []byte{1, 2, 3, 4}
+	pld2 := []byte{5, 6, 7, 8}
+
+	// write first payload at the end of first bucket
+	if err = db.Put(90, 1, val1, pld1); err != nil {
+		t.Fatal(err)
+	}
+
+	// Find a single item
+	out, err := db.Find(1, 90, 110, vals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(out) != 1 {
+		t.Fatal("number of result items should be 1")
+	}
+
+	for el, plds := range out {
+		if !reflect.DeepEqual(el.Values, val1) {
+			t.Fatal("invalid index values")
+		}
+
+		exp := [][]byte{pld1, pld0}
+		if !reflect.DeepEqual(plds, exp) {
+			t.Fatal("invalid payload")
+		}
+	}
+
+	// write second payload at the beginning of second bucket
+	if err = db.Put(100, 1, val2, pld2); err != nil {
+		t.Fatal(err)
+	}
+
+	// Find 2 different items
+	out, err = db.Find(1, 90, 110, vals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for el, plds := range out {
+		if reflect.DeepEqual(el.Values, val1) {
+			exp := [][]byte{pld1, pld0}
+			if !reflect.DeepEqual(plds, exp) {
+				t.Fatal("invalid payload")
+			}
+		} else if reflect.DeepEqual(el.Values, val2) {
+			exp := [][]byte{pld0, pld2}
+			if !reflect.DeepEqual(plds, exp) {
+				t.Fatal("invalid payload")
+			}
+		} else {
+			t.Fatal("invalid index values")
+		}
+	}
+}
+
 func BenchmarkDefaultDatabasePut(b *testing.B) {
 	files := []string{
 		"/tmp/test_0.block",
@@ -300,6 +393,64 @@ func BenchmarkDefaultDatabaseGet(b *testing.B) {
 		pno := int64(i % 4)
 
 		_, err := db.Get(pno, start, end, vals)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkDefaultDatabaseFind(b *testing.B) {
+	files := []string{
+		"/tmp/test_0.block",
+		"/tmp/test_0_0.index",
+		"/tmp/test_0_1.index",
+		"/tmp/test_0_2.index",
+		"/tmp/test_0_3.index",
+		"/tmp/test_100.block",
+		"/tmp/test_100_0.index",
+		"/tmp/test_100_1.index",
+		"/tmp/test_100_2.index",
+		"/tmp/test_100_3.index",
+	}
+
+	for _, f := range files {
+		defer os.Remove(f)
+	}
+
+	db, err := NewDefaultDatabase(DefaultDatabaseOpts{
+		DatabaseName:   "test",
+		DataPath:       "/tmp/",
+		Partitions:     4,
+		IndexDepth:     4,
+		PayloadSize:    4,
+		BucketDuration: 100,
+		Resolution:     10,
+	})
+
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	vals := []string{"a", "b", "c", ""}
+	val1 := []string{"a", "b", "c", "d"}
+	val2 := []string{"a", "b", "c", "e"}
+	pld1 := []byte{1, 2, 3, 4}
+	pld2 := []byte{5, 6, 7, 8}
+
+	// write first payload at the end of first bucket
+	if err = db.Put(90, 1, val1, pld1); err != nil {
+		b.Fatal(err)
+	}
+
+	// write second payload at the beginning of second bucket
+	if err = db.Put(100, 1, val2, pld2); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Find 2 different items
+		_, err = db.Find(1, 90, 110, vals)
 		if err != nil {
 			b.Fatal(err)
 		}

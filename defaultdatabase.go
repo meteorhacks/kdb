@@ -2,6 +2,7 @@ package kdb
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -179,6 +180,95 @@ func (db *DefaultDatabase) Get(pno, start, end int64, vals []string) (res [][]by
 		}
 
 		res = append(res, out...)
+	}
+
+	return res, nil
+}
+
+func (db *DefaultDatabase) Find(pno, start, end int64, vals []string) (res map[*IndexElement][][]byte, err error) {
+	// floor tiemstamps by resolution
+	start -= start % db.Resolution
+	end -= end % db.Resolution
+
+	now := time.Now().UnixNano()
+	if start > now || end > now || end < start {
+		return nil, ErrDefaultDatabaseInvalidTimestamp
+	}
+
+	if pno < 0 || pno > db.Partitions {
+		return nil, ErrDefaultDatabaseInvalidPartition
+	}
+
+	// base time of starting bucket
+	bs := start - (start % db.BucketDuration)
+
+	// base time of last bucket
+	be := end - (end % db.BucketDuration)
+
+	// number of payoads in final result
+	rs := (end - start) / db.Resolution
+	tmp := make(map[string][][]byte)
+	tmpVals := make(map[string][]string)
+
+	var bktStart, bktEnd int64
+
+	for t := bs; t <= be; t += db.BucketDuration {
+		bkt, err := db.getBucket(t)
+		if err != nil {
+			return nil, err
+		}
+
+		if t == bs {
+			// if it's the first bucket
+			// skip payloads before `start` time
+			bktStart = start
+		} else {
+			// defaults to base time of the bucket
+			bktStart = t
+		}
+
+		// skip payloads after end time in end bucket
+		if t == be {
+			// if this is the last bucket
+			// skip payloads after `end` time
+			bktEnd = end
+		} else {
+			// defaults to end of the bucket
+			bktEnd = t + db.BucketDuration
+		}
+
+		out, err := bkt.Find(pno, bktStart, bktEnd, vals)
+		if err != nil {
+			return nil, err
+		}
+
+		for el, plds := range out {
+			key := strings.Join(el.Values, "-")
+
+			set, ok := tmp[key]
+			if !ok {
+				set = make([][]byte, rs, rs)
+
+				var i int64
+				for i = 0; i < rs; i++ {
+					set[i] = make([]byte, db.PayloadSize)
+				}
+
+				tmp[key] = set
+				tmpVals[key] = el.Values
+			}
+
+			rStart := (bktStart - start) / db.Resolution
+			rEnd := (bktEnd - start) / db.Resolution
+			copy(set[rStart:rEnd], plds)
+		}
+	}
+
+	// move data from tmp to res
+	res = make(map[*IndexElement][][]byte)
+	for key, val := range tmpVals {
+		el := &IndexElement{Values: val}
+		res[el] = tmp[key]
 	}
 
 	return res, nil
