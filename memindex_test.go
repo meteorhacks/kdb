@@ -198,8 +198,6 @@ func TestMemIndexFind(t *testing.T) {
 }
 
 func BenchmarkMemIndexAdd(b *testing.B) {
-	b.StopTimer()
-
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
@@ -212,14 +210,12 @@ func BenchmarkMemIndexAdd(b *testing.B) {
 		b.Fatal(err)
 	}
 
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		vals := []string{"a", "b", "c", "d"}
 		vals[i%4] = vals[i%4] + strconv.Itoa(i)
 
-		b.StartTimer()
 		_, err := idx.Add(vals, 100)
-		b.StopTimer()
-
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -227,8 +223,6 @@ func BenchmarkMemIndexAdd(b *testing.B) {
 }
 
 func BenchmarkMemIndexGet(b *testing.B) {
-	b.StopTimer()
-
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
@@ -244,11 +238,9 @@ func BenchmarkMemIndexGet(b *testing.B) {
 	vals := []string{"a", "b", "c", "d"}
 	_, err = idx.Add(vals, 100)
 
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		b.StartTimer()
 		_, err := idx.Get(vals)
-		b.StopTimer()
-
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -256,8 +248,6 @@ func BenchmarkMemIndexGet(b *testing.B) {
 }
 
 func BenchmarkMemIndexFindQueryInMiddle(b *testing.B) {
-	b.StopTimer()
-
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
@@ -274,11 +264,9 @@ func BenchmarkMemIndexFindQueryInMiddle(b *testing.B) {
 	_, err = idx.Add([]string{"a", "b", "c", "e"}, 200)
 	_, err = idx.Add([]string{"a", "b", "f", "d"}, 300)
 
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		b.StartTimer()
 		_, err = idx.Find([]string{"a", "b", "", "d"})
-		b.StopTimer()
-
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -286,8 +274,6 @@ func BenchmarkMemIndexFindQueryInMiddle(b *testing.B) {
 }
 
 func BenchmarkMemIndexFindQueryAtEnd(b *testing.B) {
-	b.StopTimer()
-
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
@@ -304,10 +290,9 @@ func BenchmarkMemIndexFindQueryAtEnd(b *testing.B) {
 	_, err = idx.Add([]string{"a", "b", "c", "e"}, 200)
 	_, err = idx.Add([]string{"a", "b", "f", "d"}, 300)
 
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		b.StartTimer()
 		_, err = idx.Find([]string{"a", "b", "c", ""})
-		b.StopTimer()
 
 		if err != nil {
 			b.Fatal(err)

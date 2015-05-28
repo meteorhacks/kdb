@@ -300,6 +300,7 @@ func BenchmarkFixedBlockNewRecord(b *testing.B) {
 		defer blk.Close()
 	}
 
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if _, err := blk.NewRecord(); err != nil {
 			b.Fatal(err)
@@ -309,8 +310,6 @@ func BenchmarkFixedBlockNewRecord(b *testing.B) {
 
 // Benchmark Put requests with random positions
 func BenchmarkFixedBlockPut(b *testing.B) {
-	b.StopTimer()
-
 	fpath := "/tmp/b1"
 	defer os.Remove(fpath)
 
@@ -350,6 +349,7 @@ func BenchmarkFixedBlockPut(b *testing.B) {
 	var rnd *big.Int
 	var rpos, ppos int64
 
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		rnd, _ = rand.Int(rand.Reader, max)
 		rpos = rnd.Int64()
@@ -359,10 +359,7 @@ func BenchmarkFixedBlockPut(b *testing.B) {
 
 		rand.Read(pld)
 
-		b.StartTimer()
 		err := blk.Put(rpos, ppos, pld)
-		b.StopTimer()
-
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -371,8 +368,6 @@ func BenchmarkFixedBlockPut(b *testing.B) {
 
 // Benchmark Get requests with random ranges
 func BenchmarkFixedBlockGet(b *testing.B) {
-	b.StopTimer()
-
 	fpath := "/tmp/b1"
 	defer os.Remove(fpath)
 
@@ -410,6 +405,7 @@ func BenchmarkFixedBlockGet(b *testing.B) {
 	var rnd *big.Int
 	var rpos, start, end int64
 
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		rnd, _ = rand.Int(rand.Reader, maxRec)
 		rpos = rnd.Int64()
@@ -420,10 +416,7 @@ func BenchmarkFixedBlockGet(b *testing.B) {
 		rnd, _ = rand.Int(rand.Reader, maxEnd)
 		end = start + rnd.Int64()
 
-		b.StartTimer()
 		_, err := blk.Get(rpos, start, end)
-		b.StopTimer()
-
 		if err != nil {
 			b.Fatal(err)
 		}
