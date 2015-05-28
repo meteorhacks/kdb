@@ -2,7 +2,6 @@ package kdb
 
 import (
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"reflect"
 	"strconv"
@@ -213,12 +212,9 @@ func BenchmarkMemIndexAdd(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	baseVals := []string{"a", "b", "c", "d"}
-
 	for i := 0; i < b.N; i++ {
-		vals := baseVals
-		r := rand.Intn(10)
-		vals[i%4] = vals[i%4] + strconv.Itoa(r)
+		vals := []string{"a", "b", "c", "d"}
+		vals[i%4] = vals[i%4] + strconv.Itoa(i)
 
 		b.StartTimer()
 		_, err := idx.Add(vals, 100)
