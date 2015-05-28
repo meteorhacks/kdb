@@ -22,14 +22,14 @@ func TestNewDefaultBucket(t *testing.T) {
 	}
 
 	bkt, err := NewDefaultBucket(DefaultBucketOpts{
-		DatabaseName: "test",
-		DataPath:     "/tmp/",
-		Partitions:   4,
-		IndexDepth:   4,
-		PayloadSize:  4,
-		BucketSize:   100,
-		Resolution:   10,
-		BaseTime:     0,
+		DatabaseName:   "test",
+		DataPath:       "/tmp/",
+		Partitions:     4,
+		IndexDepth:     4,
+		PayloadSize:    4,
+		BucketDuration: 100,
+		Resolution:     10,
+		BaseTime:       0,
 	})
 
 	if err != nil {
@@ -55,14 +55,14 @@ func TestDefaultBucketPut(t *testing.T) {
 	}
 
 	bkt, err := NewDefaultBucket(DefaultBucketOpts{
-		DatabaseName: "test",
-		DataPath:     "/tmp/",
-		Partitions:   4,
-		IndexDepth:   4,
-		PayloadSize:  4,
-		BucketSize:   100,
-		Resolution:   10,
-		BaseTime:     0,
+		DatabaseName:   "test",
+		DataPath:       "/tmp/",
+		Partitions:     4,
+		IndexDepth:     4,
+		PayloadSize:    4,
+		BucketDuration: 100,
+		Resolution:     10,
+		BaseTime:       0,
 	})
 
 	if err != nil {
@@ -70,9 +70,9 @@ func TestDefaultBucketPut(t *testing.T) {
 	}
 
 	vals := []string{"a", "b", "c", "d"}
-	payl := []byte("byte")
+	pld := []byte("byte")
 
-	err = bkt.Put(20, 1, vals, payl)
+	err = bkt.Put(20, 1, vals, pld)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,14 +92,14 @@ func TestDefaultBucketGet(t *testing.T) {
 	}
 
 	bkt, err := NewDefaultBucket(DefaultBucketOpts{
-		DatabaseName: "test",
-		DataPath:     "/tmp/",
-		Partitions:   4,
-		IndexDepth:   4,
-		PayloadSize:  4,
-		BucketSize:   100,
-		Resolution:   10,
-		BaseTime:     0,
+		DatabaseName:   "test",
+		DataPath:       "/tmp/",
+		Partitions:     4,
+		IndexDepth:     4,
+		PayloadSize:    4,
+		BucketDuration: 100,
+		Resolution:     10,
+		BaseTime:       0,
 	})
 
 	if err != nil {
@@ -107,9 +107,9 @@ func TestDefaultBucketGet(t *testing.T) {
 	}
 
 	vals := []string{"a", "b", "c", "d"}
-	payl := []byte{1, 2, 3, 4}
+	pld := []byte{1, 2, 3, 4}
 
-	err = bkt.Put(20, 1, vals, payl)
+	err = bkt.Put(20, 1, vals, pld)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestDefaultBucketGet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(out) != 3 || !reflect.DeepEqual(out[1], payl) {
+	if len(out) != 3 || !reflect.DeepEqual(out[1], pld) {
 		t.Fatal("incorrect values")
 	}
 }
@@ -138,14 +138,14 @@ func TestDefaultBucketFind(t *testing.T) {
 	}
 
 	bkt, err := NewDefaultBucket(DefaultBucketOpts{
-		DatabaseName: "test",
-		DataPath:     "/tmp/",
-		Partitions:   4,
-		IndexDepth:   4,
-		PayloadSize:  4,
-		BucketSize:   100,
-		Resolution:   10,
-		BaseTime:     0,
+		DatabaseName:   "test",
+		DataPath:       "/tmp/",
+		Partitions:     4,
+		IndexDepth:     4,
+		PayloadSize:    4,
+		BucketDuration: 100,
+		Resolution:     10,
+		BaseTime:       0,
 	})
 
 	if err != nil {
@@ -205,14 +205,14 @@ func BenchmarkDefaultBucketPut(b *testing.B) {
 	}
 
 	bkt, err := NewDefaultBucket(DefaultBucketOpts{
-		DatabaseName: "test",
-		DataPath:     "/tmp/",
-		Partitions:   4,
-		IndexDepth:   4,
-		PayloadSize:  4,
-		BucketSize:   100,
-		Resolution:   10,
-		BaseTime:     0,
+		DatabaseName:   "test",
+		DataPath:       "/tmp/",
+		Partitions:     4,
+		IndexDepth:     4,
+		PayloadSize:    4,
+		BucketDuration: 100,
+		Resolution:     10,
+		BaseTime:       0,
 	})
 
 	if err != nil {
@@ -220,11 +220,11 @@ func BenchmarkDefaultBucketPut(b *testing.B) {
 	}
 
 	vals := []string{"a", "b", "c", "d"}
-	payl := []byte("byte")
+	pld := []byte("byte")
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err = bkt.Put(20, 1, vals, payl)
+		err = bkt.Put(20, 1, vals, pld)
 
 		if err != nil {
 			b.Fatal(err)
@@ -246,14 +246,14 @@ func BenchmarkDefaultBucketGet(b *testing.B) {
 	}
 
 	bkt, err := NewDefaultBucket(DefaultBucketOpts{
-		DatabaseName: "test",
-		DataPath:     "/tmp/",
-		Partitions:   4,
-		IndexDepth:   4,
-		PayloadSize:  4,
-		BucketSize:   100,
-		Resolution:   10,
-		BaseTime:     0,
+		DatabaseName:   "test",
+		DataPath:       "/tmp/",
+		Partitions:     4,
+		IndexDepth:     4,
+		PayloadSize:    4,
+		BucketDuration: 100,
+		Resolution:     10,
+		BaseTime:       0,
 	})
 
 	if err != nil {
@@ -261,9 +261,9 @@ func BenchmarkDefaultBucketGet(b *testing.B) {
 	}
 
 	vals := []string{"a", "b", "c", "d"}
-	payl := []byte{1, 2, 3, 4}
+	pld := []byte{1, 2, 3, 4}
 
-	err = bkt.Put(20, 1, vals, payl)
+	err = bkt.Put(20, 1, vals, pld)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -291,21 +291,21 @@ func _BenchmarkDefaultBucketFind(b *testing.B, n int) {
 	}
 
 	bkt, err := NewDefaultBucket(DefaultBucketOpts{
-		DatabaseName: "test",
-		DataPath:     "/tmp/",
-		Partitions:   4,
-		IndexDepth:   4,
-		PayloadSize:  4,
-		BucketSize:   100,
-		Resolution:   10,
-		BaseTime:     0,
+		DatabaseName:   "test",
+		DataPath:       "/tmp/",
+		Partitions:     4,
+		IndexDepth:     4,
+		PayloadSize:    4,
+		BucketDuration: 100,
+		Resolution:     10,
+		BaseTime:       0,
 	})
 
 	if err != nil {
 		b.Fatal(err)
 	}
 
-	payl := []byte{1, 2, 3, 4}
+	pld := []byte{1, 2, 3, 4}
 
 	for i := 0; i < n; i++ {
 		vals := []string{"a", "b", "c", "d"}
@@ -313,7 +313,7 @@ func _BenchmarkDefaultBucketFind(b *testing.B, n int) {
 		vals[i%4] = vals[i%4] + strconv.Itoa(r)
 		pno := int64(i % 4)
 
-		err = bkt.Put(20, pno, vals, payl)
+		err = bkt.Put(20, pno, vals, pld)
 		if err != nil {
 			b.Fatal(err)
 		}

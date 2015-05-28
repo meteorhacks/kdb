@@ -24,7 +24,7 @@ type DefaultBucketOpts struct {
 
 	// bucket duration in nano seconds
 	// this should be a multiple of `Resolution`
-	BucketSize int64
+	BucketDuration int64
 
 	// bucket resolution in nano seconds
 	Resolution int64
@@ -67,7 +67,7 @@ func NewDefaultBucket(opts DefaultBucketOpts) (bkt *DefaultBucket, err error) {
 	}
 
 	// number of payloads in a record
-	pldCount := opts.BucketSize / opts.Resolution
+	pldCount := opts.BucketDuration / opts.Resolution
 
 	// e.g: /data/db_0000.block
 	blkPath := basePath + ".block"
@@ -127,8 +127,27 @@ func (bkt *DefaultBucket) Get(pno, start, end int64, vals []string) (res [][]byt
 		return nil, err
 	}
 
+	if el == nil {
+		return nil, nil
+	}
+
 	spos := bkt.tsToPPos(start)
 	epos := bkt.tsToPPos(end)
+
+	// if data is not available
+	// send an empty payload
+	if el == nil {
+		size := int(epos - spos)
+		pld := make([]byte, bkt.PayloadSize, bkt.PayloadSize)
+		res = make([][]byte, size, size)
+
+		for i := 0; i < size; i++ {
+			res[i] = pld
+		}
+
+		return res, nil
+	}
+
 	res, err = bkt.block.Get(el.Position, spos, epos)
 	if err != nil {
 		return nil, err
@@ -160,5 +179,5 @@ func (bkt *DefaultBucket) Find(pno, start, end int64, vals []string) (res map[*I
 }
 
 func (bkt *DefaultBucket) tsToPPos(ts int64) (pos int64) {
-	return (ts % bkt.BucketSize) / bkt.Resolution
+	return (ts - bkt.BaseTime) / bkt.Resolution
 }
