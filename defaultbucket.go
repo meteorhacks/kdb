@@ -73,7 +73,7 @@ func NewDefaultBucket(opts DefaultBucketOpts) (bkt *DefaultBucket, err error) {
 	blkPath := basePath + ".block"
 
 	blk, err := NewFixedBlock(FixedBlockOpts{
-		FilePath:     blkPath,
+		BlockPath:    blkPath,
 		PayloadSize:  opts.PayloadSize,
 		PayloadCount: pldCount,
 	})

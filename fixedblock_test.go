@@ -9,11 +9,12 @@ import (
 
 // test creating a block struct with an empty block file
 func TestNewFixedBlockNewFile(t *testing.T) {
-	fpath := "/tmp/b1"
+	blockPath := "/tmp/b1"
+	fpath := blockPath + "/block.data"
 	defer os.Remove(fpath)
 
 	blk, err := NewFixedBlock(FixedBlockOpts{
-		FilePath:     fpath,
+		BlockPath:    blockPath,
 		PayloadSize:  4,
 		PayloadCount: 10,
 	})
@@ -41,7 +42,8 @@ func TestNewFixedBlockNewFile(t *testing.T) {
 
 // test creating a block struct with an existing block file
 func TestNewFixedBlockExistingFile(t *testing.T) {
-	fpath := "/tmp/b1"
+	blockPath := "/tmp/b1"
+	fpath := blockPath + "/block.data"
 	defer os.Remove(fpath)
 
 	fd, err := os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0644)
@@ -62,7 +64,7 @@ func TestNewFixedBlockExistingFile(t *testing.T) {
 	}
 
 	blk, err := NewFixedBlock(FixedBlockOpts{
-		FilePath:     fpath,
+		BlockPath:    blockPath,
 		PayloadSize:  4,
 		PayloadCount: 10,
 	})
@@ -82,7 +84,9 @@ func TestNewFixedBlockExistingFile(t *testing.T) {
 
 // test creating a block struct with a corrupt block file
 func TestNewFixedBlockCorruptFile(t *testing.T) {
-	fpath := "/tmp/b1"
+	blockPath := "/tmp/b1"
+	fpath := blockPath + "/block.data"
+	os.MkdirAll(blockPath, 0744)
 	defer os.Remove(fpath)
 
 	fd, err := os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0644)
@@ -103,7 +107,7 @@ func TestNewFixedBlockCorruptFile(t *testing.T) {
 	}
 
 	blk, err := NewFixedBlock(FixedBlockOpts{
-		FilePath:     fpath,
+		BlockPath:    blockPath,
 		PayloadSize:  4,
 		PayloadCount: 10,
 	})
@@ -118,11 +122,11 @@ func TestNewFixedBlockCorruptFile(t *testing.T) {
 }
 
 func TestFixedBlockNewRecord(t *testing.T) {
-	fpath := "/tmp/b1"
-	defer os.Remove(fpath)
+	blockPath := "/tmp/b1"
+	defer os.Remove(blockPath)
 
 	blk, err := NewFixedBlock(FixedBlockOpts{
-		FilePath:     fpath,
+		BlockPath:    blockPath,
 		PayloadSize:  4,
 		PayloadCount: 10,
 	})
@@ -148,7 +152,9 @@ func TestFixedBlockNewRecord(t *testing.T) {
 // value read later must match value written using Put
 // this also confirms that the value is written at correct position
 func TestFixedBlockPut(t *testing.T) {
-	fpath := "/tmp/b1"
+	blockPath := "/tmp/b1"
+	fpath := blockPath + "/block.data"
+	os.MkdirAll(blockPath, 0744)
 	defer os.Remove(fpath)
 
 	fd, err := os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0644)
@@ -169,7 +175,7 @@ func TestFixedBlockPut(t *testing.T) {
 	}
 
 	blk, err := NewFixedBlock(FixedBlockOpts{
-		FilePath:     fpath,
+		BlockPath:    blockPath,
 		PayloadSize:  4,
 		PayloadCount: 10,
 	})
@@ -221,7 +227,9 @@ func TestFixedBlockPut(t *testing.T) {
 // value read using Get must match value written manually
 // this also confirms that the value is read from the correct position
 func TestFixedBlockGet(t *testing.T) {
-	fpath := "/tmp/b1"
+	blockPath := "/tmp/b1"
+	fpath := blockPath + "/block.data"
+	os.MkdirAll(blockPath, 0744)
 	defer os.Remove(fpath)
 
 	fd, err := os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0644)
@@ -255,7 +263,7 @@ func TestFixedBlockGet(t *testing.T) {
 	}
 
 	blk, err := NewFixedBlock(FixedBlockOpts{
-		FilePath:     fpath,
+		BlockPath:    blockPath,
 		PayloadSize:  4,
 		PayloadCount: 10,
 	})
@@ -287,7 +295,7 @@ func BenchmarkFixedBlockNewRecord(b *testing.B) {
 	defer os.Remove(fpath)
 
 	blk, err := NewFixedBlock(FixedBlockOpts{
-		FilePath:     fpath,
+		BlockPath:    fpath,
 		PayloadSize:  16,
 		PayloadCount: 1000,
 	})
@@ -310,7 +318,9 @@ func BenchmarkFixedBlockNewRecord(b *testing.B) {
 
 // Benchmark Put requests with random positions
 func BenchmarkFixedBlockPut(b *testing.B) {
-	fpath := "/tmp/b1"
+	blockPath := "/tmp/b1"
+	fpath := blockPath + "/block.data"
+	os.MkdirAll(blockPath, 0744)
 	defer os.Remove(fpath)
 
 	fd, err := os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0644)
@@ -331,7 +341,7 @@ func BenchmarkFixedBlockPut(b *testing.B) {
 	}
 
 	blk, err := NewFixedBlock(FixedBlockOpts{
-		FilePath:     fpath,
+		BlockPath:    blockPath,
 		PayloadSize:  4,
 		PayloadCount: 10,
 	})
@@ -368,7 +378,9 @@ func BenchmarkFixedBlockPut(b *testing.B) {
 
 // Benchmark Get requests with random ranges
 func BenchmarkFixedBlockGet(b *testing.B) {
-	fpath := "/tmp/b1"
+	blockPath := "/tmp/b1"
+	fpath := blockPath + "/block.data"
+	os.MkdirAll(blockPath, 0744)
 	defer os.Remove(fpath)
 
 	fd, err := os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0644)
@@ -385,7 +397,7 @@ func BenchmarkFixedBlockGet(b *testing.B) {
 	}
 
 	blk, err := NewFixedBlock(FixedBlockOpts{
-		FilePath:     fpath,
+		BlockPath:    blockPath,
 		PayloadSize:  4,
 		PayloadCount: 10,
 	})

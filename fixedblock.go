@@ -9,7 +9,7 @@ import (
 
 const (
 	FixedBlockFMode  = os.O_CREATE | os.O_RDWR
-	FixedBlockFPerms = 0644
+	FixedBlockFPerms = 0744
 )
 
 var (
@@ -18,9 +18,20 @@ var (
 	ErrFixedBlockFileCorrupt  = errors.New("data is corrupt in the block file")
 )
 
+type FixedBlockMetaData struct {
+	// number of records we put into a segment
+	recordsPerSegments int64
+
+	// number of segemnts we've
+	segmentCount int
+
+	// number of records in all of the segments
+	recordCount int
+}
+
 type FixedBlockOpts struct {
 	// path to block file
-	FilePath string
+	BlockPath string
 
 	// maximum payload size in bytes
 	PayloadSize int64
@@ -39,7 +50,13 @@ type FixedBlock struct {
 }
 
 func NewFixedBlock(opts FixedBlockOpts) (blk *FixedBlock, err error) {
-	file, err := os.OpenFile(opts.FilePath, FixedBlockFMode, FixedBlockFPerms)
+	err = os.MkdirAll(opts.BlockPath, FixedBlockFPerms)
+	if err != nil {
+		return nil, err
+	}
+
+	blockFilePath := opts.BlockPath + "/block.data"
+	file, err := os.OpenFile(blockFilePath, FixedBlockFMode, FixedBlockFPerms)
 	if err != nil {
 		return nil, err
 	}
@@ -134,4 +151,9 @@ func (blk *FixedBlock) Close() (err error) {
 	}
 
 	return nil
+}
+
+func (blk *FixedBlock) getMetadata() (metadata *FixedBlockMetaData, err error) {
+
+	return nil, nil
 }
