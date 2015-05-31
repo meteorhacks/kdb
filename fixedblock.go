@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"runtime"
+	"strconv"
 	"sync"
 )
 
@@ -46,12 +47,13 @@ type FixedBlockOpts struct {
 
 type FixedBlock struct {
 	FixedBlockOpts
-	file     *os.File // file used to store payloads
-	rsize    int64    // byte size of a single record
-	fsize    int64    // offset of next record (file size in bytes)
-	rtemp    []byte   // reusable empty template for new records
-	mutex    *sync.Mutex
-	metadata *Pslice
+	file             *os.File // file used to store payloads
+	rsize            int64    // byte size of a single record
+	fsize            int64    // offset of next record (file size in bytes)
+	rtemp            []byte   // reusable empty template for new records
+	writeMutex       *sync.Mutex
+	preallocateMutex *sync.Mutex
+	metadata         *Pslice
 }
 
 func NewFixedBlock(opts FixedBlockOpts) (blk *FixedBlock, err error) {
@@ -79,7 +81,8 @@ func NewFixedBlock(opts FixedBlockOpts) (blk *FixedBlock, err error) {
 	}
 
 	rtemp := make([]byte, rsize)
-	mutex := &sync.Mutex{}
+	writeMutex := &sync.Mutex{}
+	preallocateMutex := &sync.Mutex{}
 
 	// load metadata
 	metadataFilePath := opts.BlockPath + "/metadata"
@@ -88,14 +91,14 @@ func NewFixedBlock(opts FixedBlockOpts) (blk *FixedBlock, err error) {
 		return nil, err
 	}
 
-	blk = &FixedBlock{opts, file, rsize, fsize, rtemp, mutex, metadata}
+	blk = &FixedBlock{opts, file, rsize, fsize, rtemp, writeMutex, preallocateMutex, metadata}
 	return blk, nil
 }
 
 // NewRecord Creates a new record at the end of the block file
 // and returns the index of the record
 func (blk *FixedBlock) NewRecord() (rpos int64, err error) {
-	blk.mutex.Lock()
+	blk.writeMutex.Lock()
 	offset := blk.fsize
 
 	n, err := blk.file.WriteAt(blk.rtemp, offset)
@@ -106,7 +109,7 @@ func (blk *FixedBlock) NewRecord() (rpos int64, err error) {
 	}
 
 	blk.fsize += blk.rsize
-	blk.mutex.Unlock()
+	blk.writeMutex.Unlock()
 	runtime.Gosched()
 
 	rpos = offset / blk.rsize
@@ -163,6 +166,42 @@ func (blk *FixedBlock) Close() error {
 
 	if err := blk.metadata.Close(); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (blk *FixedBlock) preallocate(segmentNo int, records int64) error {
+	sizeToAllocate := blk.PayloadCount * blk.PayloadSize * records
+	segmentFilepath := blk.BlockPath + "/block_" + strconv.Itoa(segmentNo) + ".data"
+
+	if _, err := os.Stat(segmentFilepath); err == nil {
+		return errors.New("segment file already exists")
+	}
+
+	f, err := os.OpenFile(segmentFilepath, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+
+	var chunkSize int64 = 1024 * 1024 * 5 // 5 MB
+	var writtenSize int64 = 0
+	for true {
+		bytesToWrite := sizeToAllocate - writtenSize
+		if bytesToWrite == 0 {
+			break
+		} else if bytesToWrite > chunkSize {
+			bytesToWrite = chunkSize
+		}
+
+		data := make([]byte, bytesToWrite)
+		if n, err := f.WriteAt(data, writtenSize); err != nil {
+			return err
+		} else if int64(n) != bytesToWrite {
+			return errors.New("couldn't write expected bytes to disk")
+		}
+
+		writtenSize += bytesToWrite
 	}
 
 	return nil
