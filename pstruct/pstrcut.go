@@ -1,12 +1,17 @@
 package pstruct
 
 // Pstrcut is a way to persist a struct to a disk
-// While reading and writing very fast without encoding / decoding
-// It uses mmap to map a file in the disk to the struct
+// It can read and write very fast without encoding / decoding
+// It uses mmap to map a file in the disk. Then map it to struct pointer
+//
 // But this comes with come caveats
-// * You can only use basic types in the struct (no slices, strings)
+// * You can only use fixed size premitives in the struct (no slices, strings)
 // * Does not portable between different implementations of go
 // * That means you can't move the data file between platforms
+//
+// Uses
+// * If you need to persist some configurations very fast (eg:- counter)
+// * If you don't wanna use something like capnproto
 
 import (
 	"errors"
