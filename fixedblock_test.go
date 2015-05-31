@@ -314,11 +314,11 @@ func TestFixedBlockPreallocate(t *testing.T) {
 		PayloadCount: 10,
 	})
 
-	if err := blk.preallocate(1, 99999); err != nil {
+	if err := blk.preallocate(10, 99999); err != nil {
 		t.Fatal(err)
 	}
 
-	segmentFile := blockPath + "/block_1.data"
+	segmentFile := blockPath + "/block_10.data"
 	stat, err := os.Stat(segmentFile)
 	if err != nil {
 		t.Fatal(err)
@@ -333,8 +333,7 @@ func TestFixedBlockPreallocate(t *testing.T) {
 
 func TestFixedBlockPreallocateExisiting(t *testing.T) {
 	blockPath := "/tmp/b1"
-	fpath := blockPath + "/block.data"
-	if err := os.RemoveAll(fpath); err != nil {
+	if err := os.RemoveAll(blockPath); err != nil {
 		t.Fatal(err)
 	}
 
@@ -373,6 +372,7 @@ func TestFixedBlockShouldPreallocateWhenNoSegments(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	blk.metadata.Set(FBMetadata_POS_SEGMENT_COUNT, float64(0))
 	ok, segementNo := blk.shouldPreallocate()
 
 	if !ok {

@@ -101,6 +101,13 @@ func NewFixedBlock(opts FixedBlockOpts) (blk *FixedBlock, err error) {
 	}
 
 	blk = &FixedBlock{opts, file, rsize, fsize, rtemp, writeMutex, preallocateMutex, allocateMutex, false, metadata}
+
+	// start the initial pre-allocation process
+	err = blk.preallocateIfNeeded()
+	if err != nil {
+		return nil, err
+	}
+
 	return blk, nil
 }
 
@@ -110,9 +117,7 @@ func (blk *FixedBlock) NewRecord() (rpos int64, err error) {
 	blk.allocateMutex.Lock()
 	// start allocation if needed inside a goroutine
 	go func() {
-		blk.preallocateMutex.Lock()
 		err := blk.preallocateIfNeeded()
-		blk.preallocateMutex.Unlock()
 
 		if err != nil {
 			log.Printf("could not allocate segement for block at: %s", blk.BlockPath)
@@ -276,6 +281,7 @@ func (blk *FixedBlock) preallocateIfNeeded() (err error) {
 	recordsPerSegment := blk.metadata.Get(FBMetadata_POS_RECORDS_PER_SEGMENT)
 
 	if ok, _ := blk.shouldPreallocate(); ok {
+		blk.preallocateMutex.Lock()
 		// we need to check again, is it okay to preallocate
 		// it's possible to trigger this multiple times
 		if okAgain, segmentNo := blk.shouldPreallocate(); okAgain {
@@ -286,6 +292,8 @@ func (blk *FixedBlock) preallocateIfNeeded() (err error) {
 				blk.metadata.Set(FBMetadata_POS_SEGMENT_COUNT, float64(segmentNo))
 			}
 		}
+
+		blk.preallocateMutex.Unlock()
 
 		if err != nil {
 			return err
