@@ -44,7 +44,7 @@ func TestDefaultDatabasePut(t *testing.T) {
 	}
 
 	for _, f := range files {
-		defer os.Remove(f)
+		defer os.RemoveAll(f)
 	}
 
 	db, err := NewDefaultDatabase(DefaultDatabaseOpts{
@@ -125,7 +125,7 @@ func TestDefaultDatabaseGet(t *testing.T) {
 	}
 
 	for _, f := range files {
-		defer os.Remove(f)
+		defer os.RemoveAll(f)
 	}
 
 	db, err := NewDefaultDatabase(DefaultDatabaseOpts{
@@ -214,7 +214,7 @@ func TestDefaultDatabaseFind(t *testing.T) {
 	}
 
 	for _, f := range files {
-		defer os.Remove(f)
+		defer os.RemoveAll(f)
 	}
 
 	db, err := NewDefaultDatabase(DefaultDatabaseOpts{
@@ -302,7 +302,7 @@ func BenchmarkDefaultDatabasePut(b *testing.B) {
 	}
 
 	for _, f := range files {
-		defer os.Remove(f)
+		defer os.RemoveAll(f)
 	}
 
 	db, err := NewDefaultDatabase(DefaultDatabaseOpts{
@@ -351,7 +351,7 @@ func BenchmarkDefaultDatabaseGet(b *testing.B) {
 	}
 
 	for _, f := range files {
-		defer os.Remove(f)
+		defer os.RemoveAll(f)
 	}
 
 	db, err := NewDefaultDatabase(DefaultDatabaseOpts{
@@ -414,7 +414,7 @@ func BenchmarkDefaultDatabaseFind(b *testing.B) {
 	}
 
 	for _, f := range files {
-		defer os.Remove(f)
+		defer os.RemoveAll(f)
 	}
 
 	db, err := NewDefaultDatabase(DefaultDatabaseOpts{

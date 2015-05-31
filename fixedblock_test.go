@@ -11,7 +11,9 @@ import (
 func TestNewFixedBlockNewFile(t *testing.T) {
 	blockPath := "/tmp/b1"
 	fpath := blockPath + "/block.data"
-	defer os.RemoveAll(fpath)
+	if err := os.RemoveAll(fpath); err != nil {
+		t.Fatal(err)
+	}
 
 	blk, err := NewFixedBlock(FixedBlockOpts{
 		BlockPath:    blockPath,
@@ -44,7 +46,9 @@ func TestNewFixedBlockNewFile(t *testing.T) {
 func TestNewFixedBlockExistingFile(t *testing.T) {
 	blockPath := "/tmp/b1"
 	fpath := blockPath + "/block.data"
-	defer os.RemoveAll(fpath)
+	if err := os.RemoveAll(fpath); err != nil {
+		t.Fatal(err)
+	}
 
 	fd, err := os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
@@ -86,8 +90,10 @@ func TestNewFixedBlockExistingFile(t *testing.T) {
 func TestNewFixedBlockCorruptFile(t *testing.T) {
 	blockPath := "/tmp/b1"
 	fpath := blockPath + "/block.data"
+	if err := os.RemoveAll(fpath); err != nil {
+		t.Fatal(err)
+	}
 	os.MkdirAll(blockPath, 0744)
-	defer os.RemoveAll(fpath)
 
 	fd, err := os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
@@ -123,7 +129,9 @@ func TestNewFixedBlockCorruptFile(t *testing.T) {
 
 func TestFixedBlockNewRecord(t *testing.T) {
 	blockPath := "/tmp/b1"
-	defer os.RemoveAll(blockPath)
+	if err := os.RemoveAll(blockPath); err != nil {
+		t.Fatal(err)
+	}
 
 	blk, err := NewFixedBlock(FixedBlockOpts{
 		BlockPath:    blockPath,
@@ -142,7 +150,7 @@ func TestFixedBlockNewRecord(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		if rpos, err := blk.NewRecord(); err != nil {
 			t.Fatal(err)
-		} else if rpos != int64(i) {
+		} else if rpos != int64(i+1) {
 			t.Fatal("incorrect rpos")
 		}
 	}
@@ -154,8 +162,10 @@ func TestFixedBlockNewRecord(t *testing.T) {
 func TestFixedBlockPut(t *testing.T) {
 	blockPath := "/tmp/b1"
 	fpath := blockPath + "/block.data"
+	if err := os.RemoveAll(fpath); err != nil {
+		t.Fatal(err)
+	}
 	os.MkdirAll(blockPath, 0744)
-	defer os.RemoveAll(fpath)
 
 	fd, err := os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
@@ -229,8 +239,10 @@ func TestFixedBlockPut(t *testing.T) {
 func TestFixedBlockGet(t *testing.T) {
 	blockPath := "/tmp/b1"
 	fpath := blockPath + "/block.data"
+	if err := os.RemoveAll(fpath); err != nil {
+		t.Fatal(err)
+	}
 	os.MkdirAll(blockPath, 0744)
-	defer os.RemoveAll(fpath)
 
 	fd, err := os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
@@ -292,8 +304,9 @@ func TestFixedBlockGet(t *testing.T) {
 
 func TestFixedBlockPreallocate(t *testing.T) {
 	blockPath := "/tmp/b1"
-	fpath := blockPath + "/block.data"
-	defer os.RemoveAll(fpath)
+	if err := os.RemoveAll(blockPath); err != nil {
+		t.Fatal(err)
+	}
 
 	blk, err := NewFixedBlock(FixedBlockOpts{
 		BlockPath:    blockPath,
@@ -313,7 +326,7 @@ func TestFixedBlockPreallocate(t *testing.T) {
 
 	var expectedPayloadSize int64 = 99999 * 4 * 10
 	if stat.Size() != expectedPayloadSize {
-		t.Error("segment written is incorrect")
+		t.Error("segment written size is incorrect")
 	}
 
 }
@@ -321,7 +334,9 @@ func TestFixedBlockPreallocate(t *testing.T) {
 func TestFixedBlockPreallocateExisiting(t *testing.T) {
 	blockPath := "/tmp/b1"
 	fpath := blockPath + "/block.data"
-	defer os.RemoveAll(fpath)
+	if err := os.RemoveAll(fpath); err != nil {
+		t.Fatal(err)
+	}
 
 	blk, err := NewFixedBlock(FixedBlockOpts{
 		BlockPath:    blockPath,
@@ -342,9 +357,126 @@ func TestFixedBlockPreallocateExisiting(t *testing.T) {
 	}
 }
 
+func TestFixedBlockShouldPreallocateWhenNoSegments(t *testing.T) {
+	blockPath := "/tmp/b1"
+	if err := os.RemoveAll(blockPath); err != nil {
+		t.Fatal(err)
+	}
+
+	blk, err := NewFixedBlock(FixedBlockOpts{
+		BlockPath:    blockPath,
+		PayloadSize:  4,
+		PayloadCount: 10,
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ok, segementNo := blk.shouldPreallocate()
+
+	if !ok {
+		t.Error("need to preallocate")
+	}
+
+	if segementNo != 1 {
+		t.Error("need to preallocate the first segment")
+	}
+}
+
+func TestFixedBlockShouldPreallocateWhenThereAreSegments(t *testing.T) {
+	blockPath := "/tmp/b1"
+	if err := os.RemoveAll(blockPath); err != nil {
+		t.Fatal(err)
+	}
+
+	blk, err := NewFixedBlock(FixedBlockOpts{
+		BlockPath:    blockPath,
+		PayloadSize:  4,
+		PayloadCount: 10,
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	blk.metadata.Set(FBMetadata_POS_SEGMENT_COUNT, float64(10))
+
+	ok, _ := blk.shouldPreallocate()
+
+	if ok {
+		t.Error("no need to preallocate")
+	}
+}
+
+func TestFixedBlockShouldPreallocateWhenThereAreSegmentsButLessSpace(t *testing.T) {
+	blockPath := "/tmp/b1"
+	if err := os.RemoveAll(blockPath); err != nil {
+		t.Fatal(err)
+	}
+
+	blk, err := NewFixedBlock(FixedBlockOpts{
+		BlockPath:    blockPath,
+		PayloadSize:  4,
+		PayloadCount: 10,
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	recordsPerSegment := blk.metadata.Get(FBMetadata_POS_RECORDS_PER_SEGMENT)
+	blk.metadata.Set(FBMetadata_POS_SEGMENT_COUNT, float64(1))
+	blk.metadata.Set(FBMetadata_POS_RECORD_COUNT, float64(recordsPerSegment-100))
+
+	ok, segmentNo := blk.shouldPreallocate()
+
+	if !ok {
+		t.Error("need to preallocate")
+	}
+
+	if segmentNo != 2 {
+		t.Error("need to preallocate the second segment")
+	}
+}
+
+func TestFixedBlockPreallocateIfNeeded(t *testing.T) {
+	blockPath := "/tmp/b100"
+	if err := os.RemoveAll(blockPath); err != nil {
+		t.Fatal(err)
+	}
+
+	blk, err := NewFixedBlock(FixedBlockOpts{
+		BlockPath:    blockPath,
+		PayloadSize:  4,
+		PayloadCount: 10,
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	records := (blk.metadata.Get(FBMetadata_POS_RECORDS_PER_SEGMENT) * 12) - 100
+	blk.metadata.Set(FBMetadata_POS_SEGMENT_COUNT, 12)
+	blk.metadata.Set(FBMetadata_POS_RECORD_COUNT, records)
+
+	for i := 0; i < 3; i++ {
+		if err := blk.preallocateIfNeeded(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	segmentCount := blk.metadata.Get(FBMetadata_POS_SEGMENT_COUNT)
+	if segmentCount != float64(13) {
+		t.Error("allocation failed", segmentCount)
+	}
+}
+
 func BenchmarkFixedBlockNewRecord(b *testing.B) {
 	fpath := "/tmp/b1"
-	defer os.RemoveAll(fpath)
+	if err := os.RemoveAll(fpath); err != nil {
+		b.Fatal(err)
+	}
 
 	blk, err := NewFixedBlock(FixedBlockOpts{
 		BlockPath:    fpath,
@@ -372,8 +504,10 @@ func BenchmarkFixedBlockNewRecord(b *testing.B) {
 func BenchmarkFixedBlockPut(b *testing.B) {
 	blockPath := "/tmp/b1"
 	fpath := blockPath + "/block.data"
+	if err := os.RemoveAll(fpath); err != nil {
+		b.Fatal(err)
+	}
 	os.MkdirAll(blockPath, 0744)
-	defer os.RemoveAll(fpath)
 
 	fd, err := os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
@@ -432,8 +566,10 @@ func BenchmarkFixedBlockPut(b *testing.B) {
 func BenchmarkFixedBlockGet(b *testing.B) {
 	blockPath := "/tmp/b1"
 	fpath := blockPath + "/block.data"
+	if err := os.RemoveAll(fpath); err != nil {
+		b.Fatal(err)
+	}
 	os.MkdirAll(blockPath, 0744)
-	defer os.RemoveAll(fpath)
 
 	fd, err := os.OpenFile(fpath, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {

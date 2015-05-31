@@ -51,7 +51,7 @@ func TestDefaultBucketPut(t *testing.T) {
 	}
 
 	for _, f := range files {
-		defer os.Remove(f)
+		defer os.RemoveAll(f)
 	}
 
 	bkt, err := NewDefaultBucket(DefaultBucketOpts{
