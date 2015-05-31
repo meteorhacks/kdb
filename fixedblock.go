@@ -5,12 +5,15 @@ import (
 	"os"
 	"runtime"
 	"sync"
-	"unsafe"
 )
 
 const (
 	FixedBlockFMode  = os.O_CREATE | os.O_RDWR
 	FixedBlockFPerms = 0744
+	// keep index position of relavant metadata keys in the pslice
+	FBMetadata_POS_RECORDS_PER_SEGMENT = 0
+	FBMetadata_POS_SEGMENT_COUNT       = 1
+	FBMetadata_POS_RECORD_COUNT        = 2
 )
 
 var (
@@ -43,13 +46,12 @@ type FixedBlockOpts struct {
 
 type FixedBlock struct {
 	FixedBlockOpts
-	file           *os.File // file used to store payloads
-	rsize          int64    // byte size of a single record
-	fsize          int64    // offset of next record (file size in bytes)
-	rtemp          []byte   // reusable empty template for new records
-	mutex          *sync.Mutex
-	metadata       *FixedBlockMetaData
-	metadataHandle Pstruct
+	file     *os.File // file used to store payloads
+	rsize    int64    // byte size of a single record
+	fsize    int64    // offset of next record (file size in bytes)
+	rtemp    []byte   // reusable empty template for new records
+	mutex    *sync.Mutex
+	metadata *Pslice
 }
 
 func NewFixedBlock(opts FixedBlockOpts) (blk *FixedBlock, err error) {
@@ -81,14 +83,12 @@ func NewFixedBlock(opts FixedBlockOpts) (blk *FixedBlock, err error) {
 
 	// load metadata
 	metadataFilePath := opts.BlockPath + "/metadata"
-	metadataSize := unsafe.Sizeof(FixedBlockMetaData{})
-	metadataHandle := NewPstruct(metadataFilePath, metadataSize)
-	if err := metadataHandle.Load(); err != nil {
+	metadata, err := NewPslice(metadataFilePath, 3)
+	if err != nil {
 		return nil, err
 	}
-	metadata := (*FixedBlockMetaData)(metadataHandle.Pointer)
 
-	blk = &FixedBlock{opts, file, rsize, fsize, rtemp, mutex, metadata, metadataHandle}
+	blk = &FixedBlock{opts, file, rsize, fsize, rtemp, mutex, metadata}
 	return blk, nil
 }
 
@@ -161,7 +161,7 @@ func (blk *FixedBlock) Close() error {
 		return err
 	}
 
-	if err := blk.metadataHandle.Unload(); err != nil {
+	if err := blk.metadata.Close(); err != nil {
 		return err
 	}
 
