@@ -5,6 +5,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"unsafe"
 )
 
 const (
@@ -42,11 +43,13 @@ type FixedBlockOpts struct {
 
 type FixedBlock struct {
 	FixedBlockOpts
-	file  *os.File // file used to store payloads
-	rsize int64    // byte size of a single record
-	fsize int64    // offset of next record (file size in bytes)
-	rtemp []byte   // reusable empty template for new records
-	mutex *sync.Mutex
+	file           *os.File // file used to store payloads
+	rsize          int64    // byte size of a single record
+	fsize          int64    // offset of next record (file size in bytes)
+	rtemp          []byte   // reusable empty template for new records
+	mutex          *sync.Mutex
+	metadata       *FixedBlockMetaData
+	metadataHandle Pstruct
 }
 
 func NewFixedBlock(opts FixedBlockOpts) (blk *FixedBlock, err error) {
@@ -76,7 +79,16 @@ func NewFixedBlock(opts FixedBlockOpts) (blk *FixedBlock, err error) {
 	rtemp := make([]byte, rsize)
 	mutex := &sync.Mutex{}
 
-	blk = &FixedBlock{opts, file, rsize, fsize, rtemp, mutex}
+	// load metadata
+	metadataFilePath := opts.BlockPath + "/metadata"
+	metadataSize := unsafe.Sizeof(FixedBlockMetaData{})
+	metadataHandle := NewPstruct(metadataFilePath, metadataSize)
+	if err := metadataHandle.Load(); err != nil {
+		return nil, err
+	}
+	metadata := (*FixedBlockMetaData)(metadataHandle.Pointer)
+
+	blk = &FixedBlock{opts, file, rsize, fsize, rtemp, mutex, metadata, metadataHandle}
 	return blk, nil
 }
 
@@ -144,16 +156,14 @@ func (blk *FixedBlock) Get(rpos, start, end int64) (res [][]byte, err error) {
 }
 
 // close the file handler
-func (blk *FixedBlock) Close() (err error) {
-	err = blk.file.Close()
-	if err != nil {
+func (blk *FixedBlock) Close() error {
+	if err := blk.file.Close(); err != nil {
+		return err
+	}
+
+	if err := blk.metadataHandle.Unload(); err != nil {
 		return err
 	}
 
 	return nil
-}
-
-func (blk *FixedBlock) getMetadata() (metadata *FixedBlockMetaData, err error) {
-
-	return nil, nil
 }

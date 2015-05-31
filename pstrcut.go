@@ -1,4 +1,4 @@
-package pstruct
+package kdb
 
 // Pstrcut is a way to persist a struct to a disk
 // It can read and write very fast without encoding / decoding
@@ -6,8 +6,8 @@ package pstruct
 //
 // But this comes with come caveats
 // * You can only use fixed size premitives in the struct (no slices, strings)
-// * Does not portable between different implementations of go
-// * That means you can't move the data file between platforms
+// * Does not portable between different implementations of go.
+// * That means you can't move the data file between platforms.
 //
 // Uses
 // * If you need to persist some configurations very fast (eg:- counter)
