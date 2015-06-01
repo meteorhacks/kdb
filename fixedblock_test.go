@@ -302,6 +302,43 @@ func TestFixedBlockGet(t *testing.T) {
 	}
 }
 
+func TestFixedBlockAllocateWhenCreated(t *testing.T) {
+	blockPath := "/tmp/b1"
+	if err := os.RemoveAll(blockPath); err != nil {
+		t.Fatal(err)
+	}
+
+	blk, err := NewFixedBlock(FixedBlockOpts{
+		BlockPath:    blockPath,
+		PayloadSize:  4,
+		PayloadCount: 10,
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := blk.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	blk2, err := NewFixedBlock(FixedBlockOpts{
+		BlockPath:    blockPath,
+		PayloadSize:  4,
+		PayloadCount: 10,
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	segmentCount := blk2.metadata.Get(FBMetadata_POS_SEGMENT_COUNT)
+
+	if segmentCount != 1 {
+		t.Error("there should only segment allocation")
+	}
+}
+
 func TestFixedBlockPreallocate(t *testing.T) {
 	blockPath := "/tmp/b1"
 	if err := os.RemoveAll(blockPath); err != nil {

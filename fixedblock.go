@@ -115,7 +115,7 @@ func NewFixedBlock(opts FixedBlockOpts) (blk *FixedBlock, err error) {
 // and returns the index of the record
 func (blk *FixedBlock) NewRecord() (rpos int64, err error) {
 	blk.allocateMutex.Lock()
-	// start allocation if needed inside a goroutine
+	// start allocation if needed, and do it inside a goroutine
 	go func() {
 		err := blk.preallocateIfNeeded()
 
@@ -126,9 +126,9 @@ func (blk *FixedBlock) NewRecord() (rpos int64, err error) {
 
 	nextRecordChan := make(chan float64)
 
-	// it's possible that not there is no room for a record
-	// in this case, we need to wait until allocating
-	// but allocation happens after this function exists
+	// it's possible to have state where there is no room for a record
+	// in this case, we need to wait until the allocation process in complete
+	// but allocation happens after this function exits
 	// (since it's running inside go routine)
 	// that's why we need to run our logic also within a goroutine
 	go func() {
@@ -142,7 +142,8 @@ func (blk *FixedBlock) NewRecord() (rpos int64, err error) {
 			blk.preallocateMutex.Unlock()
 
 			if nextRecord > newTotalRecords {
-				// seems like allocation failed, let's throw an error
+				// seems like allocation failed (since there is not new records)
+				// let's throw an error
 				nextRecordChan <- -1
 				return
 			}
