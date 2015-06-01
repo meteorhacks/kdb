@@ -18,9 +18,10 @@ const (
 )
 
 var (
-	ErrFixedBlockBytesWritten = errors.New("incorrect number of bytes written to block file")
-	ErrFixedBlockBytesRead    = errors.New("incorrect number of bytes read from block file")
-	ErrFixedBlockFileCorrupt  = errors.New("data is corrupt in the block file")
+	ErrFixedBlockBytesWritten   = errors.New("incorrect number of bytes written to block file")
+	ErrFixedBlockBytesRead      = errors.New("incorrect number of bytes read from block file")
+	ErrFixedBlockFileCorrupt    = errors.New("data is corrupt in the block file")
+	ErrFixedBlockInvalidSegment = errors.New("segment file does not exist for given position")
 )
 
 type FixedBlockMetaData struct {
@@ -43,14 +44,17 @@ type FixedBlockOpts struct {
 
 	// number of payloads in a record
 	PayloadCount int64
+
+	// number of records per segment
+	SegmentSize int64
 }
 
 type FixedBlock struct {
 	FixedBlockOpts
-	file             *os.File // file used to store payloads
-	rsize            int64    // byte size of a single record
-	fsize            int64    // offset of next record (file size in bytes)
-	rtemp            []byte   // reusable empty template for new records
+	files            map[int64]*os.File // files used to store segments
+	fsize            map[int64]int64    // offsets of next record (file size in bytes)
+	rsize            int64              // byte size of a single record
+	rtemp            []byte             // reusable empty template for new records
 	writeMutex       *sync.Mutex
 	preallocateMutex *sync.Mutex
 	allocateMutex    *sync.Mutex
@@ -64,24 +68,9 @@ func NewFixedBlock(opts FixedBlockOpts) (blk *FixedBlock, err error) {
 		return nil, err
 	}
 
-	blockFilePath := opts.BlockPath + "/block.data"
-	file, err := os.OpenFile(blockFilePath, FixedBlockFMode, FixedBlockFPerms)
-	if err != nil {
-		return nil, err
-	}
-
-	finfo, err := file.Stat()
-	if err != nil {
-		return nil, err
-	}
-
+	files := make(map[int64]*os.File)
+	fsize := make(map[int64]int64)
 	rsize := opts.PayloadSize * opts.PayloadCount
-
-	fsize := finfo.Size()
-	if delta := fsize % rsize; delta != 0 {
-		return nil, ErrFixedBlockFileCorrupt
-	}
-
 	rtemp := make([]byte, rsize)
 	writeMutex := &sync.Mutex{}
 	preallocateMutex := &sync.Mutex{}
@@ -97,15 +86,40 @@ func NewFixedBlock(opts FixedBlockOpts) (blk *FixedBlock, err error) {
 	// set the records per segment in metadat
 	// we may need to get this via some configurations first
 	if metadata.Get(FBMetadata_POS_RECORDS_PER_SEGMENT) == 0 {
-		metadata.Set(FBMetadata_POS_RECORDS_PER_SEGMENT, 100000)
+		value := float64(opts.SegmentSize)
+		metadata.Set(FBMetadata_POS_RECORDS_PER_SEGMENT, value)
 	}
 
-	blk = &FixedBlock{opts, file, rsize, fsize, rtemp, writeMutex, preallocateMutex, allocateMutex, false, metadata}
+	blk = &FixedBlock{opts, files, fsize, rsize, rtemp, writeMutex, preallocateMutex, allocateMutex, false, metadata}
 
 	// start the initial pre-allocation process
 	err = blk.preallocateIfNeeded()
 	if err != nil {
 		return nil, err
+	}
+
+	if count := blk.metadata.Get(FBMetadata_POS_SEGMENT_COUNT); count > 0 {
+		n := int(count)
+
+		for i := 1; i <= n; i++ {
+			fpath := blk.BlockPath + "/block_" + strconv.Itoa(i) + ".data"
+
+			file, err := os.OpenFile(fpath, FixedBlockFMode, FixedBlockFPerms)
+			if err != nil {
+				return nil, err
+			}
+
+			finfo, err := file.Stat()
+			if err != nil {
+				return nil, err
+			}
+
+			fsize := finfo.Size()
+
+			sno := int64(i)
+			blk.files[sno] = file
+			blk.fsize[sno] = fsize
+		}
 	}
 
 	return blk, nil
@@ -171,8 +185,16 @@ func (blk *FixedBlock) NewRecord() (rpos int64, err error) {
 // rpos and ppos are positions of record and payload and must be
 // mutiplied by record size and payload size to get offsets
 func (blk *FixedBlock) Put(rpos, ppos int64, pld []byte) (err error) {
+	sno := 1 + rpos/blk.SegmentSize
+	rpos = rpos % blk.SegmentSize
+
+	file, ok := blk.files[sno]
+	if !ok {
+		return ErrFixedBlockInvalidSegment
+	}
+
 	offset := rpos*blk.rsize + ppos*blk.PayloadSize
-	n, err := blk.file.WriteAt(pld, offset)
+	n, err := file.WriteAt(pld, offset)
 	if err != nil {
 		return err
 	} else if n != int(blk.PayloadSize) {
@@ -186,12 +208,20 @@ func (blk *FixedBlock) Put(rpos, ppos int64, pld []byte) (err error) {
 // start, end and rpos are positions of payload and record it can be
 // mutiplied by payload size and record size to get offsets
 func (blk *FixedBlock) Get(rpos, start, end int64) (res [][]byte, err error) {
+	sno := 1 + rpos/blk.SegmentSize
+	rpos = rpos % blk.SegmentSize
+
+	file, ok := blk.files[sno]
+	if !ok {
+		return nil, ErrFixedBlockInvalidSegment
+	}
+
 	offset := rpos*blk.rsize + start*blk.PayloadSize
 	pldCount := end - start
 	resSize := blk.PayloadSize * pldCount
 	resData := make([]byte, resSize)
 
-	n, err := blk.file.ReadAt(resData, offset)
+	n, err := file.ReadAt(resData, offset)
 	if err != nil {
 		return nil, err
 	} else if n != int(resSize) {
@@ -210,8 +240,10 @@ func (blk *FixedBlock) Get(rpos, start, end int64) (res [][]byte, err error) {
 
 // close the file handler
 func (blk *FixedBlock) Close() error {
-	if err := blk.file.Close(); err != nil {
-		return err
+	for _, f := range blk.files {
+		if err := f.Close(); err != nil {
+			return err
+		}
 	}
 
 	if err := blk.metadata.Close(); err != nil {
@@ -224,6 +256,7 @@ func (blk *FixedBlock) Close() error {
 func (blk *FixedBlock) preallocate(segmentNo int, records int64) error {
 	sizeToAllocate := blk.PayloadCount * blk.PayloadSize * records
 	segmentFilepath := blk.BlockPath + "/block_" + strconv.Itoa(segmentNo) + ".data"
+	fsize := sizeToAllocate
 
 	if _, err := os.Stat(segmentFilepath); err == nil {
 		return errors.New("segment file already exists")
@@ -254,6 +287,10 @@ func (blk *FixedBlock) preallocate(segmentNo int, records int64) error {
 		writtenSize += bytesToWrite
 	}
 
+	sno := int64(segmentNo)
+	blk.files[sno] = f
+	blk.fsize[sno] = fsize
+
 	return nil
 }
 
@@ -271,7 +308,7 @@ func (blk *FixedBlock) shouldPreallocate() (bool, int) {
 	totalRecords := segments * recordsPerSegment
 	freeRecords := totalRecords - records
 
-	if freeRecords < recordsPerSegment/4 {
+	if freeRecords < recordsPerSegment/2 {
 		return true, int(segments + 1)
 	} else {
 		return false, 0

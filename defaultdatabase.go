@@ -41,6 +41,9 @@ type DefaultDatabaseOpts struct {
 
 	// bucket resolution in nano seconds
 	Resolution int64
+
+	// number of records per segment
+	SegmentSize int64
 }
 
 type DefaultDatabase struct {
@@ -72,6 +75,9 @@ func NewDefaultDatabase(opts DefaultDatabaseOpts) (db *DefaultDatabase, err erro
 
 	bkts := make(map[int64]Bucket, DefaultDatabaseMaxHotBuckets)
 	db = &DefaultDatabase{opts, bkts, emptyOut}
+
+	ts := time.Now().UnixNano()
+	db.getBucket(ts)
 
 	return db, nil
 }
@@ -283,14 +289,15 @@ func (db *DefaultDatabase) getBucket(ts int64) (bkt Bucket, err error) {
 	}
 
 	bkt, err = NewDefaultBucket(DefaultBucketOpts{
-		DatabaseName:   db.DefaultDatabaseOpts.DatabaseName,
-		DataPath:       db.DefaultDatabaseOpts.DataPath,
-		Partitions:     db.DefaultDatabaseOpts.Partitions,
-		IndexDepth:     db.DefaultDatabaseOpts.IndexDepth,
-		PayloadSize:    db.DefaultDatabaseOpts.PayloadSize,
-		BucketDuration: db.DefaultDatabaseOpts.BucketDuration,
-		Resolution:     db.DefaultDatabaseOpts.Resolution,
+		DatabaseName:   db.DatabaseName,
+		DataPath:       db.DataPath,
+		Partitions:     db.Partitions,
+		IndexDepth:     db.IndexDepth,
+		PayloadSize:    db.PayloadSize,
+		BucketDuration: db.BucketDuration,
+		Resolution:     db.Resolution,
 		BaseTime:       baseTS,
+		SegmentSize:    db.SegmentSize,
 	})
 
 	if err != nil {

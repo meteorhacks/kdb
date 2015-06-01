@@ -29,6 +29,9 @@ type DefaultBucketOpts struct {
 	// bucket resolution in nano seconds
 	Resolution int64
 
+	// number of records per segment
+	SegmentSize int64
+
 	// base timestamp
 	BaseTime int64
 }
@@ -69,13 +72,11 @@ func NewDefaultBucket(opts DefaultBucketOpts) (bkt *DefaultBucket, err error) {
 	// number of payloads in a record
 	pldCount := opts.BucketDuration / opts.Resolution
 
-	// e.g: /data/db_0000.block
-	blkPath := basePath + ".block"
-
 	blk, err := NewFixedBlock(FixedBlockOpts{
-		BlockPath:    blkPath,
+		BlockPath:    basePath,
 		PayloadSize:  opts.PayloadSize,
 		PayloadCount: pldCount,
+		SegmentSize:  opts.SegmentSize,
 	})
 
 	if err != nil {
