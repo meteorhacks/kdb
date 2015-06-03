@@ -77,7 +77,9 @@ func NewDefaultDatabase(opts DefaultDatabaseOpts) (db *DefaultDatabase, err erro
 	db = &DefaultDatabase{opts, bkts, emptyOut}
 
 	ts := time.Now().UnixNano()
-	db.getBucket(ts)
+	if _, err = db.getBucket(ts); err != nil {
+		return nil, err
+	}
 
 	return db, nil
 }
