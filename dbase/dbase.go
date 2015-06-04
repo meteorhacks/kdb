@@ -29,9 +29,6 @@ type Options struct {
 	// place to store data files
 	DataPath string
 
-	// number of partitions to divide indexes
-	Partitions int64
-
 	// depth of the index tree
 	IndexDepth int64
 
