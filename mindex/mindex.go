@@ -336,13 +336,16 @@ func (idx *MIndex) saveElement(el *kdb.IndexElement) (err error) {
 }
 
 func (idx *MIndex) preAllocateIfNeeded(sizeNeedToWrite int64) (err error) {
+	idx.mutex.Lock()
+	defer idx.mutex.Unlock()
+
 	excessBytes := idx.totalFileSize - idx.currentFileSize
 	if excessBytes <= sizeNeedToWrite {
+
 		// let's allocate some bytes
 		allocateAmount := PreAllocateSize - excessBytes
 		emptyBytes := make([]byte, allocateAmount)
 
-		idx.mutex.Lock()
 		// let's unmap the previous mapped data
 		syscall.Munmap(idx.mmapedData)
 
@@ -350,7 +353,6 @@ func (idx *MIndex) preAllocateIfNeeded(sizeNeedToWrite int64) (err error) {
 		if err != nil {
 			return err
 		}
-		idx.mutex.Unlock()
 
 		// let's allocate again
 		idx.totalFileSize += allocateAmount

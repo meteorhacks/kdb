@@ -318,12 +318,12 @@ func (blk *DBlock) shouldPreallocate() (should bool, nextSegmentId int64) {
 }
 
 func (blk *DBlock) preallocateIfNeeded() (err error) {
+	blk.preallocMutex.Lock()
+	defer blk.preallocMutex.Unlock()
+
 	size := int64(blk.metadata.Get(MetadataSegmentSize))
 
 	if ok, _ := blk.shouldPreallocate(); ok {
-		blk.preallocMutex.Lock()
-		defer blk.preallocMutex.Unlock()
-
 		if ok, sno := blk.shouldPreallocate(); ok {
 			err = blk.preallocate(sno, size)
 			if err != nil {
