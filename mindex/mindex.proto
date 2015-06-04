@@ -1,4 +1,4 @@
-package kdb;
+package mindex;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
@@ -11,7 +11,7 @@ option (gogoproto.sizer_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 option (gogoproto.goproto_getters_all) = false;
 
-message MemIndexElement{
+message MIndexEl{
   required int64 position = 1;
   repeated string values = 2;
 }

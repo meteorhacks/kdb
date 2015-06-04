@@ -1,20 +1,26 @@
-package kdb
+package dbucket
 
 import (
+	"os"
 	"path"
 	"strconv"
+
+	"github.com/meteorhacks/kdb"
+	"github.com/meteorhacks/kdb/dblock"
+	"github.com/meteorhacks/kdb/mindex"
 )
 
-type DefaultBucketOpts struct {
+const (
+	FilePermissions = 0744
+)
+
+type Options struct {
 	// database name. Currently only used with naming files
 	// can be useful when supporting multiple DBs
 	DatabaseName string
 
 	// place to store data files
 	DataPath string
-
-	// number of partitions to divide indexes
-	Partitions int64
 
 	// depth of the index tree
 	IndexDepth int64
@@ -29,75 +35,70 @@ type DefaultBucketOpts struct {
 	// bucket resolution in nano seconds
 	Resolution int64
 
+	// number of records per segment
+	SegmentSize int64
+
 	// base timestamp
 	BaseTime int64
 }
 
-type DefaultBucket struct {
-	DefaultBucketOpts
-	indexes []Index
-	block   Block
+type DBucket struct {
+	Options
+	index kdb.Index
+	block kdb.Block
 }
 
-func NewDefaultBucket(opts DefaultBucketOpts) (bkt *DefaultBucket, err error) {
-	// a map of partition number to indexes
-	idxs := make([]Index, opts.Partitions)
-
+func New(opts Options) (bkt *DBucket, err error) {
 	basePath := path.Join(
 		opts.DataPath,
 		opts.DatabaseName+"_"+strconv.Itoa(int(opts.BaseTime)),
 	)
 
-	var pno int64
-	for pno = 0; pno < opts.Partitions; pno++ {
-		pnoStr := strconv.Itoa(int(pno))
-
-		// e.g: /data/db_0000_1.index
-		idxPath := basePath + "_" + pnoStr + ".index"
-
-		idxs[pno], err = NewMemIndex(MemIndexOpts{
-			FilePath:    idxPath,
-			IndexDepth:  opts.IndexDepth,
-			PartitionNo: pno,
-		})
-
-		if err != nil {
-			return nil, err
-		}
+	err = os.MkdirAll(basePath, FilePermissions)
+	if err != nil {
+		return nil, err
 	}
 
-	// number of payloads in a record
-	pldCount := opts.BucketDuration / opts.Resolution
-
-	// e.g: /data/db_0000.block
-	blkPath := basePath + ".block"
-
-	blk, err := NewFixedBlock(FixedBlockOpts{
-		FilePath:     blkPath,
-		PayloadSize:  opts.PayloadSize,
-		PayloadCount: pldCount,
+	idxPath := path.Join(basePath, "index")
+	index, err := mindex.NewMIndex(mindex.MIndexOpts{
+		FilePath:   idxPath,
+		IndexDepth: opts.IndexDepth,
 	})
 
 	if err != nil {
 		return nil, err
 	}
 
-	bkt = &DefaultBucket{opts, idxs, blk}
+	// number of payloads in a record
+	pldCount := opts.BucketDuration / opts.Resolution
+
+	block, err := dblock.New(dblock.Options{
+		BlockPath:    basePath,
+		PayloadSize:  opts.PayloadSize,
+		PayloadCount: pldCount,
+		SegmentSize:  opts.SegmentSize,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	bkt = &DBucket{opts, index, block}
 	return bkt, nil
 }
 
 // Put adds new data to correct index and block
-func (bkt *DefaultBucket) Put(ts, pno int64, vals []string, pld []byte) (err error) {
+func (bkt *DBucket) Put(ts int64, vals []string, pld []byte) (err error) {
 	var rpos int64
 
-	index := bkt.indexes[pno]
+	index := bkt.index
 	el, err := index.Get(vals)
 	if err != nil {
 		return err
 	}
 
 	if el == nil {
-		rpos, err = bkt.block.NewRecord()
+		rpos, err = bkt.block.New()
 		if err != nil {
 			return err
 		}
@@ -119,8 +120,8 @@ func (bkt *DefaultBucket) Put(ts, pno int64, vals []string, pld []byte) (err err
 }
 
 // Get method gets the payload for matching value set
-func (bkt *DefaultBucket) Get(pno, start, end int64, vals []string) (res [][]byte, err error) {
-	index := bkt.indexes[pno]
+func (bkt *DBucket) Get(start, end int64, vals []string) (res [][]byte, err error) {
+	index := bkt.index
 
 	el, err := index.Get(vals)
 	if err != nil {
@@ -157,10 +158,10 @@ func (bkt *DefaultBucket) Get(pno, start, end int64, vals []string) (res [][]byt
 }
 
 // Find method finds all payloads matching the given query
-func (bkt *DefaultBucket) Find(pno, start, end int64, vals []string) (res map[*IndexElement][][]byte, err error) {
-	res = make(map[*IndexElement][][]byte)
+func (bkt *DBucket) Find(start, end int64, vals []string) (res map[*kdb.IndexElement][][]byte, err error) {
+	res = make(map[*kdb.IndexElement][][]byte)
 
-	index := bkt.indexes[pno]
+	index := bkt.index
 	els, err := index.Find(vals)
 	if err != nil {
 		return nil, err
@@ -178,6 +179,20 @@ func (bkt *DefaultBucket) Find(pno, start, end int64, vals []string) (res map[*I
 	return res, nil
 }
 
-func (bkt *DefaultBucket) tsToPPos(ts int64) (pos int64) {
+func (bkt *DBucket) Close() (err error) {
+	err = bkt.index.Close()
+	if err != nil {
+		return err
+	}
+
+	err = bkt.block.Close()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (bkt *DBucket) tsToPPos(ts int64) (pos int64) {
 	return (ts - bkt.BaseTime) / bkt.Resolution
 }

@@ -1,4 +1,4 @@
-package kdb
+package mindex
 
 import (
 	"io/ioutil"
@@ -6,13 +6,15 @@ import (
 	"reflect"
 	"strconv"
 	"testing"
+
+	"github.com/meteorhacks/kdb"
 )
 
-func TestNewMemIndexNewFile(t *testing.T) {
+func TestNewMIndexNewFile(t *testing.T) {
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
-	idx, err := NewMemIndex(MemIndexOpts{
+	idx, err := NewMIndex(MIndexOpts{
 		FilePath:   fpath,
 		IndexDepth: 4,
 	})
@@ -44,11 +46,11 @@ func TestNewMemIndexNewFile(t *testing.T) {
 	}
 }
 
-func TestNewMemIndexExistingFile(t *testing.T) {
+func TestNewMIndexExistingFile(t *testing.T) {
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
-	idx, err := NewMemIndex(MemIndexOpts{
+	idx, err := NewMIndex(MIndexOpts{
 		FilePath:   fpath,
 		IndexDepth: 4,
 	})
@@ -62,7 +64,7 @@ func TestNewMemIndexExistingFile(t *testing.T) {
 
 	idx.Close()
 
-	idx2, err := NewMemIndex(MemIndexOpts{
+	idx2, err := NewMIndex(MIndexOpts{
 		FilePath:   fpath,
 		IndexDepth: 4,
 	})
@@ -79,7 +81,7 @@ func TestNewMemIndexExistingFile(t *testing.T) {
 	}
 }
 
-func TestNewMemIndexCorruptFile(t *testing.T) {
+func TestNewMIndexCorruptFile(t *testing.T) {
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
@@ -94,7 +96,7 @@ func TestNewMemIndexCorruptFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = NewMemIndex(MemIndexOpts{
+	_, err = NewMIndex(MIndexOpts{
 		FilePath:   fpath,
 		IndexDepth: 4,
 	})
@@ -104,11 +106,11 @@ func TestNewMemIndexCorruptFile(t *testing.T) {
 	}
 }
 
-func TestMemIndexAdd(t *testing.T) {
+func TestMIndexAdd(t *testing.T) {
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
-	idx, err := NewMemIndex(MemIndexOpts{
+	idx, err := NewMIndex(MIndexOpts{
 		FilePath:   fpath,
 		IndexDepth: 4,
 	})
@@ -131,11 +133,11 @@ func TestMemIndexAdd(t *testing.T) {
 	}
 }
 
-func TestMemIndexGet(t *testing.T) {
+func TestMIndexGet(t *testing.T) {
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
-	idx, err := NewMemIndex(MemIndexOpts{
+	idx, err := NewMIndex(MIndexOpts{
 		FilePath:   fpath,
 		IndexDepth: 4,
 	})
@@ -157,11 +159,11 @@ func TestMemIndexGet(t *testing.T) {
 	}
 }
 
-func TestMemIndexFind(t *testing.T) {
+func TestMIndexFind(t *testing.T) {
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
-	idx, err := NewMemIndex(MemIndexOpts{
+	idx, err := NewMIndex(MIndexOpts{
 		FilePath:   fpath,
 		IndexDepth: 4,
 	})
@@ -183,7 +185,7 @@ func TestMemIndexFind(t *testing.T) {
 		t.Fatal("should return correct number of elements")
 	}
 
-	var el1, el2 *IndexElement
+	var el1, el2 *kdb.IndexElement
 	if els[0].Position == 100 {
 		el1 = els[0]
 		el2 = els[1]
@@ -197,11 +199,11 @@ func TestMemIndexFind(t *testing.T) {
 	}
 }
 
-func BenchmarkMemIndexAdd(b *testing.B) {
+func BenchmarkMIndexAdd(b *testing.B) {
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
-	idx, err := NewMemIndex(MemIndexOpts{
+	idx, err := NewMIndex(MIndexOpts{
 		FilePath:   fpath,
 		IndexDepth: 4,
 	})
@@ -222,11 +224,11 @@ func BenchmarkMemIndexAdd(b *testing.B) {
 	}
 }
 
-func BenchmarkMemIndexGet(b *testing.B) {
+func BenchmarkMIndexGet(b *testing.B) {
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
-	idx, err := NewMemIndex(MemIndexOpts{
+	idx, err := NewMIndex(MIndexOpts{
 		FilePath:   fpath,
 		IndexDepth: 4,
 	})
@@ -247,11 +249,11 @@ func BenchmarkMemIndexGet(b *testing.B) {
 	}
 }
 
-func BenchmarkMemIndexFindQueryInMiddle(b *testing.B) {
+func BenchmarkMIndexFindQueryInMiddle(b *testing.B) {
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
-	idx, err := NewMemIndex(MemIndexOpts{
+	idx, err := NewMIndex(MIndexOpts{
 		FilePath:   fpath,
 		IndexDepth: 4,
 	})
@@ -273,11 +275,11 @@ func BenchmarkMemIndexFindQueryInMiddle(b *testing.B) {
 	}
 }
 
-func BenchmarkMemIndexFindQueryAtEnd(b *testing.B) {
+func BenchmarkMIndexFindQueryAtEnd(b *testing.B) {
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
-	idx, err := NewMemIndex(MemIndexOpts{
+	idx, err := NewMIndex(MIndexOpts{
 		FilePath:   fpath,
 		IndexDepth: 4,
 	})

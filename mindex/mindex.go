@@ -1,4 +1,7 @@
-package kdb
+//use go generate to build protocol buffer source files
+//go:generate protoc --proto_path=$GOPATH/src:$GOPATH/src/github.com/gogo/protobuf/protobuf/:. --gogo_out=. mindex.proto
+
+package mindex
 
 import (
 	"encoding/binary"
@@ -7,25 +10,27 @@ import (
 	"runtime"
 	"sync"
 	"syscall"
+
+	"github.com/meteorhacks/kdb"
 )
 
 const (
-	MemIndexFMode        = os.O_CREATE | os.O_RDWR
-	MemIndexFPerms       = 0644
-	MemIndexElHeaderSize = 8
-	MemIndexPaddingSize  = 4
-	PreAllocateSize      = 1024 * 1024 * 10 // 10 Mb pre allocation
+	MIndexFMode        = os.O_CREATE | os.O_RDWR
+	MIndexFPerms       = 0644
+	MIndexElHeaderSize = 8
+	MIndexPaddingSize  = 4
+	PreAllocateSize    = 1024 * 1024 * 10 // 10 Mb pre allocation
 )
 
 var (
-	MemIndexPadding                 = []byte{0, 0, 0, 0}
-	ErrMemIndexBytesWrittenToFile   = errors.New("incorrect number of bytes written to index file")
-	ErrMemIndexBytesWrittenToBuffer = errors.New("incorrect number of bytes written to temporary buffer")
-	ErrMemIndexBytesReadFromFile    = errors.New("incorrect number of bytes read from index file")
-	ErrMemIndexBytesReadFromBuffer  = errors.New("incorrect number of bytes read from temporary buffer")
+	MIndexPadding                 = []byte{0, 0, 0, 0}
+	ErrMIndexBytesWrittenToFile   = errors.New("incorrect number of bytes written to index file")
+	ErrMIndexBytesWrittenToBuffer = errors.New("incorrect number of bytes written to temporary buffer")
+	ErrMIndexBytesReadFromFile    = errors.New("incorrect number of bytes read from index file")
+	ErrMIndexBytesReadFromBuffer  = errors.New("incorrect number of bytes read from temporary buffer")
 )
 
-type MemIndexOpts struct {
+type MIndexOpts struct {
 	// path to block file
 	FilePath string
 
@@ -36,27 +41,27 @@ type MemIndexOpts struct {
 	PartitionNo int64
 }
 
-// Base struct of the MemIndex
+// Base struct of the MIndex
 // `root` is the starting point of the tree
-type MemIndex struct {
-	MemIndexOpts
-	root            *IndexElement // root element of the index tree
-	file            *os.File      // file used to store index nodes
-	currentFileSize int64         // file size (offset to place next index)
-	totalFileSize   int64         // total file of the file
-	mmapedData      []byte        // mmaped file data
-	mmapedOffset    int64         // offset of the mmap
+type MIndex struct {
+	MIndexOpts
+	root            *kdb.IndexElement // root element of the index tree
+	file            *os.File          // file used to store index nodes
+	currentFileSize int64             // file size (offset to place next index)
+	totalFileSize   int64             // total file of the file
+	mmapedData      []byte            // mmaped file data
+	mmapedOffset    int64             // offset of the mmap
 	mutex           *sync.Mutex
 }
 
-func NewMemIndex(opts MemIndexOpts) (idx *MemIndex, err error) {
-	file, err := os.OpenFile(opts.FilePath, MemIndexFMode, MemIndexFPerms)
+func NewMIndex(opts MIndexOpts) (idx *MIndex, err error) {
+	file, err := os.OpenFile(opts.FilePath, MIndexFMode, MIndexFPerms)
 	if err != nil {
 		return nil, err
 	}
 
-	root := &IndexElement{
-		Children: make(map[string]*IndexElement),
+	root := &kdb.IndexElement{
+		Children: make(map[string]*kdb.IndexElement),
 	}
 
 	finfo, err := file.Stat()
@@ -71,7 +76,7 @@ func NewMemIndex(opts MemIndexOpts) (idx *MemIndex, err error) {
 
 	mutex := &sync.Mutex{}
 
-	idx = &MemIndex{opts, root, file, currentFileSize, totalFileSize, mmapedData, mmapedOffset, mutex}
+	idx = &MIndex{opts, root, file, currentFileSize, totalFileSize, mmapedData, mmapedOffset, mutex}
 
 	if err := idx.load(); err != nil {
 		return nil, err
@@ -81,8 +86,8 @@ func NewMemIndex(opts MemIndexOpts) (idx *MemIndex, err error) {
 }
 
 // Add Item to the index with provided record position
-func (idx *MemIndex) Add(vals []string, rpos int64) (el *IndexElement, err error) {
-	el = &IndexElement{
+func (idx *MIndex) Add(vals []string, rpos int64) (el *kdb.IndexElement, err error) {
+	el = &kdb.IndexElement{
 		Position: rpos,
 		Values:   vals,
 	}
@@ -101,7 +106,7 @@ func (idx *MemIndex) Add(vals []string, rpos int64) (el *IndexElement, err error
 }
 
 // Get the IndexElement for given set of values
-func (idx *MemIndex) Get(vals []string) (el *IndexElement, err error) {
+func (idx *MIndex) Get(vals []string) (el *kdb.IndexElement, err error) {
 	el = idx.root
 	var ok bool
 
@@ -115,8 +120,8 @@ func (idx *MemIndex) Get(vals []string) (el *IndexElement, err error) {
 }
 
 // Get the IndexElement for given set of values
-func (idx *MemIndex) Find(vals []string) (els []*IndexElement, err error) {
-	els = make([]*IndexElement, 0)
+func (idx *MIndex) Find(vals []string) (els []*kdb.IndexElement, err error) {
+	els = make([]*kdb.IndexElement, 0)
 	root := idx.root
 	var ok bool
 
@@ -160,7 +165,7 @@ outer:
 }
 
 // close the file handler
-func (idx *MemIndex) Close() (err error) {
+func (idx *MIndex) Close() (err error) {
 	err = idx.file.Close()
 	if err != nil {
 		return err
@@ -176,8 +181,8 @@ func (idx *MemIndex) Close() (err error) {
 
 // loads index data from a file containing protobuf encoded index elements
 // TODO: handle corrupt index files (load valid index points)
-func (idx *MemIndex) load() (err error) {
-	idxEl := MemIndexElement{}
+func (idx *MIndex) load() (err error) {
+	idxEl := MIndexEl{}
 
 	err = idx.loadData(0, idx.totalFileSize)
 	if err != nil {
@@ -200,16 +205,16 @@ func (idx *MemIndex) load() (err error) {
 		idxEl.Values = nil
 
 		// read element header (element size as int64) from data
-		sizeData := data[offset : offset+MemIndexElHeaderSize]
+		sizeData := data[offset : offset+MIndexElHeaderSize]
 
 		idxElSize, n := binary.Varint(sizeData)
 
 		if n <= 0 {
-			return ErrMemIndexBytesReadFromBuffer
+			return ErrMIndexBytesReadFromBuffer
 		}
 
 		// read encoded element and Unmarshal it
-		start := offset + MemIndexElHeaderSize
+		start := offset + MIndexElHeaderSize
 		end := start + idxElSize
 		if end > idx.totalFileSize {
 			return errors.New("data size is too small to filled into protobuf")
@@ -224,9 +229,9 @@ func (idx *MemIndex) load() (err error) {
 		}
 
 		// set offset to point to the end of bytes already read
-		offset += MemIndexElHeaderSize + idxElSize + MemIndexPaddingSize
+		offset += MIndexElHeaderSize + idxElSize + MIndexPaddingSize
 
-		el := &IndexElement{
+		el := &kdb.IndexElement{
 			Position: *idxEl.Position,
 			Values:   idxEl.Values,
 		}
@@ -247,7 +252,7 @@ func (idx *MemIndex) load() (err error) {
 }
 
 // recursively go through all tree branches and collect leaf nodes
-func (idx *MemIndex) find(root *IndexElement, els []*IndexElement) []*IndexElement {
+func (idx *MIndex) find(root *kdb.IndexElement, els []*kdb.IndexElement) []*kdb.IndexElement {
 	if root.Children == nil {
 		return append(els, root)
 	}
@@ -260,7 +265,7 @@ func (idx *MemIndex) find(root *IndexElement, els []*IndexElement) []*IndexEleme
 }
 
 // add IndexElement to the tree
-func (idx *MemIndex) addElement(el *IndexElement) (err error) {
+func (idx *MIndex) addElement(el *kdb.IndexElement) (err error) {
 	root := idx.root
 	tempVals := make([]string, 4)
 
@@ -269,8 +274,8 @@ func (idx *MemIndex) addElement(el *IndexElement) (err error) {
 		tempVals[i] = v
 
 		if !ok {
-			newRoot = &IndexElement{}
-			newRoot.Children = make(map[string]*IndexElement)
+			newRoot = &kdb.IndexElement{}
+			newRoot.Children = make(map[string]*kdb.IndexElement)
 			root.Children[v] = newRoot
 		}
 
@@ -284,30 +289,30 @@ func (idx *MemIndex) addElement(el *IndexElement) (err error) {
 }
 
 // Element is saved in format [size element padding]
-func (idx *MemIndex) saveElement(el *IndexElement) (err error) {
-	mel := MemIndexElement{
+func (idx *MIndex) saveElement(el *kdb.IndexElement) (err error) {
+	mel := MIndexEl{
 		Position: &el.Position,
 		Values:   el.Values,
 	}
 
 	elementSize := mel.Size()
-	totalSize := int64(MemIndexElHeaderSize + elementSize + MemIndexPaddingSize)
+	totalSize := int64(MIndexElHeaderSize + elementSize + MIndexPaddingSize)
 	data := make([]byte, totalSize, totalSize)
 
 	// add the element header (int64 of element size)
 	binary.PutVarint(data, int64(elementSize))
 
 	// add the protobuffer encoded element to the payload
-	elData := data[MemIndexElHeaderSize : MemIndexElHeaderSize+elementSize]
+	elData := data[MIndexElHeaderSize : MIndexElHeaderSize+elementSize]
 	n, err := mel.MarshalTo(elData)
 	if err != nil {
 		return err
 	} else if n != elementSize {
-		return ErrMemIndexBytesWrittenToBuffer
+		return ErrMIndexBytesWrittenToBuffer
 	}
 
 	// add the padding at the end of the payload
-	copy(data[MemIndexElHeaderSize+elementSize:], MemIndexPadding)
+	copy(data[MIndexElHeaderSize+elementSize:], MIndexPadding)
 
 	idx.preAllocateIfNeeded(totalSize)
 
@@ -330,7 +335,7 @@ func (idx *MemIndex) saveElement(el *IndexElement) (err error) {
 	return nil
 }
 
-func (idx *MemIndex) preAllocateIfNeeded(sizeNeedToWrite int64) (err error) {
+func (idx *MIndex) preAllocateIfNeeded(sizeNeedToWrite int64) (err error) {
 	excessBytes := idx.totalFileSize - idx.currentFileSize
 	if excessBytes <= sizeNeedToWrite {
 		// let's allocate some bytes
@@ -361,7 +366,7 @@ func (idx *MemIndex) preAllocateIfNeeded(sizeNeedToWrite int64) (err error) {
 	return nil
 }
 
-func (idx *MemIndex) loadData(start, end int64) (err error) {
+func (idx *MIndex) loadData(start, end int64) (err error) {
 	fd := int(idx.file.Fd())
 	length := end - start
 	prot := syscall.PROT_READ | syscall.PROT_WRITE
