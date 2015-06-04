@@ -1,14 +1,14 @@
-package kdb
+package pslice
 
-// 	# Pslice
-//	Pslice is a float64 slice which is persitable to the disk
+//  # Pslice
+//  Pslice is a float64 slice which is persitable to the disk
 //
-// 	Pslice is very fast and set and get values in less than 2 ns. (for smaller slices)
-// 	It uses mmap and persist as we put data into the slice
-// 	We can resize the slice as well
-// 	(we've a different API than the original go slices)
+//  Pslice is very fast and set and get values in less than 2 ns. (for smaller slices)
+//  It uses mmap and persist as we put data into the slice
+//  We can resize the slice as well
+//  (we've a different API than the original go slices)
 //
-//	### Known Issues
+//  ### Known Issues
 //  * data file is not cross platform friendly
 //
 //
@@ -34,7 +34,7 @@ type Pslice struct {
 }
 
 // Create a new splice of the given lenght at the given filename
-func NewPslice(filename string, length int64) (*Pslice, error) {
+func New(filename string, length int64) (*Pslice, error) {
 	value := Pslice{}
 	value.Filename = filename
 	value.Length = length

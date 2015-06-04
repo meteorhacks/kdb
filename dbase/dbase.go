@@ -1,24 +1,27 @@
-package kdb
+package dbase
 
 import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/meteorhacks/kdb"
+	"github.com/meteorhacks/kdb/dbucket"
 )
 
 const (
-	DefaultDatabaseMaxHotBuckets = 2
+	MaxHotBuckets = 2
 )
 
 var (
-	ErrDefaultDatabaseInvalidParams      = errors.New("invalid params")
-	ErrDefaultDatabaseInvalidTimestamp   = errors.New("value came from future")
-	ErrDefaultDatabaseInvalidPartition   = errors.New("partition number is invalid")
-	ErrDefaultDatabaseInvalidIndexValues = errors.New("invalid index values")
-	ErrDefaultDatabaseInvalidPayload     = errors.New("invalid payload size")
+	ErrInvalidParams      = errors.New("invalid params")
+	ErrInvalidTimestamp   = errors.New("value came from future")
+	ErrInvalidPartition   = errors.New("partition number is invalid")
+	ErrInvalidIndexValues = errors.New("invalid index values")
+	ErrInvalidPayload     = errors.New("invalid payload size")
 )
 
-type DefaultDatabaseOpts struct {
+type Options struct {
 	// database name. Currently only used with naming files
 	// can be useful when supporting multiple Databases
 	DatabaseName string
@@ -46,23 +49,23 @@ type DefaultDatabaseOpts struct {
 	SegmentSize int64
 }
 
-type DefaultDatabase struct {
-	DefaultDatabaseOpts
+type DBase struct {
+	Options
 
 	// A map of base bucket timestamps and pointers to buckets
 	// only a preset number of buckets may be in memory at a time.
-	// If maximum number of buckets exceeds `DefaultDatabaseMaxHotBuckets`
+	// If maximum number of buckets exceeds `MaxHotBuckets`
 	// the bucket with oldest base timestamp will be removed form memory
-	Buckets map[int64]Bucket
+	Buckets map[int64]kdb.Bucket
 
 	// empty slice with enough empty payloads to fill a bucket
 	// used to fill result when bucket doesn't have required data
 	emptyOut [][]byte
 }
 
-func NewDefaultDatabase(opts DefaultDatabaseOpts) (db *DefaultDatabase, err error) {
+func New(opts Options) (db *DBase, err error) {
 	if opts.BucketDuration%opts.Resolution != 0 {
-		return nil, ErrDefaultDatabaseInvalidParams
+		return nil, ErrInvalidParams
 	}
 
 	// pre compute empty result slices to use with Get/Find requests
@@ -73,8 +76,8 @@ func NewDefaultDatabase(opts DefaultDatabaseOpts) (db *DefaultDatabase, err erro
 		emptyOut[i] = emptyPld
 	}
 
-	bkts := make(map[int64]Bucket, DefaultDatabaseMaxHotBuckets)
-	db = &DefaultDatabase{opts, bkts, emptyOut}
+	bkts := make(map[int64]kdb.Bucket, MaxHotBuckets)
+	db = &DBase{opts, bkts, emptyOut}
 
 	ts := time.Now().UnixNano()
 	if _, err = db.getBucket(ts); err != nil {
@@ -86,31 +89,27 @@ func NewDefaultDatabase(opts DefaultDatabaseOpts) (db *DefaultDatabase, err erro
 
 // Put adds new data points to the correct bucket.
 // It also validates all incoming parameters before passing on to buckets
-func (db *DefaultDatabase) Put(ts, pno int64, vals []string, pld []byte) (err error) {
+func (db *DBase) Put(ts int64, vals []string, pld []byte) (err error) {
 	// floor tiemstamps by resolution
 	ts -= ts % db.Resolution
 
 	now := time.Now().UnixNano()
 	if ts > now {
-		return ErrDefaultDatabaseInvalidTimestamp
-	}
-
-	if pno < 0 || pno > db.Partitions {
-		return ErrDefaultDatabaseInvalidPartition
+		return ErrInvalidTimestamp
 	}
 
 	if len(vals) != int(db.IndexDepth) {
-		return ErrDefaultDatabaseInvalidIndexValues
+		return ErrInvalidIndexValues
 	}
 
 	for _, v := range vals {
 		if v == "" {
-			return ErrDefaultDatabaseInvalidIndexValues
+			return ErrInvalidIndexValues
 		}
 	}
 
 	if len(pld) != int(db.PayloadSize) {
-		return ErrDefaultDatabaseInvalidPayload
+		return ErrInvalidPayload
 	}
 
 	bkt, err := db.getBucket(ts)
@@ -118,7 +117,7 @@ func (db *DefaultDatabase) Put(ts, pno int64, vals []string, pld []byte) (err er
 		return err
 	}
 
-	err = bkt.Put(ts, pno, vals, pld)
+	err = bkt.Put(ts, vals, pld)
 	if err != nil {
 		return err
 	}
@@ -126,18 +125,18 @@ func (db *DefaultDatabase) Put(ts, pno int64, vals []string, pld []byte) (err er
 	return nil
 }
 
-func (db *DefaultDatabase) Get(pno, start, end int64, vals []string) (res [][]byte, err error) {
+func (db *DBase) Get(start, end int64, vals []string) (res [][]byte, err error) {
 	// floor tiemstamps by resolution
 	start -= start % db.Resolution
 	end -= end % db.Resolution
 
 	now := time.Now().UnixNano()
 	if start > now || end > now || end < start {
-		return nil, ErrDefaultDatabaseInvalidTimestamp
+		return nil, ErrInvalidTimestamp
 	}
 
-	if pno < 0 || pno > db.Partitions {
-		return nil, ErrDefaultDatabaseInvalidPartition
+	if len(vals) != int(db.IndexDepth) {
+		return nil, ErrInvalidIndexValues
 	}
 
 	// base time of starting bucket
@@ -177,7 +176,7 @@ func (db *DefaultDatabase) Get(pno, start, end int64, vals []string) (res [][]by
 			bktEnd = t + db.BucketDuration
 		}
 
-		out, err := bkt.Get(pno, bktStart, bktEnd, vals)
+		out, err := bkt.Get(bktStart, bktEnd, vals)
 		if err != nil {
 			return nil, err
 		}
@@ -193,18 +192,14 @@ func (db *DefaultDatabase) Get(pno, start, end int64, vals []string) (res [][]by
 	return res, nil
 }
 
-func (db *DefaultDatabase) Find(pno, start, end int64, vals []string) (res map[*IndexElement][][]byte, err error) {
+func (db *DBase) Find(start, end int64, vals []string) (res map[*kdb.IndexElement][][]byte, err error) {
 	// floor tiemstamps by resolution
 	start -= start % db.Resolution
 	end -= end % db.Resolution
 
 	now := time.Now().UnixNano()
 	if start > now || end > now || end < start {
-		return nil, ErrDefaultDatabaseInvalidTimestamp
-	}
-
-	if pno < 0 || pno > db.Partitions {
-		return nil, ErrDefaultDatabaseInvalidPartition
+		return nil, ErrInvalidTimestamp
 	}
 
 	// base time of starting bucket
@@ -245,7 +240,7 @@ func (db *DefaultDatabase) Find(pno, start, end int64, vals []string) (res map[*
 			bktEnd = t + db.BucketDuration
 		}
 
-		out, err := bkt.Find(pno, bktStart, bktEnd, vals)
+		out, err := bkt.Find(bktStart, bktEnd, vals)
 		if err != nil {
 			return nil, err
 		}
@@ -273,27 +268,37 @@ func (db *DefaultDatabase) Find(pno, start, end int64, vals []string) (res map[*
 	}
 
 	// move data from tmp to res
-	res = make(map[*IndexElement][][]byte)
+	res = make(map[*kdb.IndexElement][][]byte)
 	for key, val := range tmpVals {
-		el := &IndexElement{Values: val}
+		el := &kdb.IndexElement{Values: val}
 		res[el] = tmp[key]
 	}
 
 	return res, nil
 }
 
+func (db *DBase) Close() (err error) {
+	for _, bkt := range db.Buckets {
+		err = bkt.Close()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // getBucket fetches a `Bucket` from the base timestamp => Bucket map
 // If a bucket does not exist, it will be created and added to the map
-func (db *DefaultDatabase) getBucket(ts int64) (bkt Bucket, err error) {
+func (db *DBase) getBucket(ts int64) (bkt kdb.Bucket, err error) {
 	baseTS := ts - (ts % db.BucketDuration)
 	if bkt, ok := db.Buckets[baseTS]; ok {
 		return bkt, nil
 	}
 
-	bkt, err = NewDefaultBucket(DefaultBucketOpts{
+	bkt, err = dbucket.New(dbucket.Options{
 		DatabaseName:   db.DatabaseName,
 		DataPath:       db.DataPath,
-		Partitions:     db.Partitions,
 		IndexDepth:     db.IndexDepth,
 		PayloadSize:    db.PayloadSize,
 		BucketDuration: db.BucketDuration,
@@ -307,7 +312,7 @@ func (db *DefaultDatabase) getBucket(ts int64) (bkt Bucket, err error) {
 	}
 
 	db.Buckets[baseTS] = bkt
-	// TODO: make sure hot bucket count is <= `DefaultDatabaseMaxHotBuckets`
+	// TODO: make sure hot bucket count is <= `MaxHotBuckets`
 	//       for now, we're just loading all buckets to the ram
 
 	return bkt, nil

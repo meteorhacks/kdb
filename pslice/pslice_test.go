@@ -1,16 +1,16 @@
-package kdb
+package pslice
 
 import (
 	"os"
 	"testing"
 )
 
-func TestPsliceSetGet(t *testing.T) {
+func TestSetGet(t *testing.T) {
 	filename := "/tmp/data.txt"
 	var length int64 = 8
 	defer os.Remove(filename)
 
-	slice, err := NewPslice(filename, length)
+	slice, err := New(filename, length)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -18,7 +18,7 @@ func TestPsliceSetGet(t *testing.T) {
 	slice.Set(2, 200)
 	slice.Close()
 
-	slice2, err := NewPslice(filename, length)
+	slice2, err := New(filename, length)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,12 +29,12 @@ func TestPsliceSetGet(t *testing.T) {
 	slice2.Close()
 }
 
-func TestPslicePreventMultiLoading(t *testing.T) {
+func TestPreventMultiLoading(t *testing.T) {
 	filename := "/tmp/data.txt"
 	var length int64 = 8
 	defer os.Remove(filename)
 
-	handle, err := NewPslice(filename, length)
+	handle, err := New(filename, length)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,12 +45,12 @@ func TestPslicePreventMultiLoading(t *testing.T) {
 	}
 }
 
-func TestPsliceSetMaximumLength(t *testing.T) {
+func TestSetMaximumLength(t *testing.T) {
 	filename := "/tmp/data.txt"
 	var length int64 = 8
 	defer os.Remove(filename)
 
-	slice, err := NewPslice(filename, length)
+	slice, err := New(filename, length)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestSpliceLoadAndClose(t *testing.T) {
 	var length int64 = 8
 	defer os.Remove(filename)
 
-	slice, err := NewPslice(filename, length)
+	slice, err := New(filename, length)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestPreventMultiClosing(t *testing.T) {
 	var length int64 = 8
 	defer os.Remove(filename)
 
-	slice, err := NewPslice(filename, length)
+	slice, err := New(filename, length)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,12 +92,12 @@ func TestPreventMultiClosing(t *testing.T) {
 	}
 }
 
-func TestPsliceResizing(t *testing.T) {
+func TestResizing(t *testing.T) {
 	filename := "/tmp/data.txt"
 	var length int64 = 8
 	defer os.Remove(filename)
 
-	slice, err := NewPslice(filename, length)
+	slice, err := New(filename, length)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,12 +112,12 @@ func TestPsliceResizing(t *testing.T) {
 	slice.Set(9, 1000)
 }
 
-func BenchmarkPsliceSetValues(b *testing.B) {
+func BenchmarkSetValues(b *testing.B) {
 	filename := "/tmp/data.txt"
 	length := int64(b.N)
 	defer os.Remove(filename)
 
-	slice, err := NewPslice(filename, length)
+	slice, err := New(filename, length)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -131,12 +131,12 @@ func BenchmarkPsliceSetValues(b *testing.B) {
 	slice.Close()
 }
 
-func BenchmarkPsliceSetSameValueWithSmallSize(b *testing.B) {
+func BenchmarkSetSameValueWithSmallSize(b *testing.B) {
 	filename := "/tmp/data.txt"
 	var length int64 = 10
 	defer os.Remove(filename)
 
-	slice, err := NewPslice(filename, length)
+	slice, err := New(filename, length)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -150,12 +150,12 @@ func BenchmarkPsliceSetSameValueWithSmallSize(b *testing.B) {
 	slice.Close()
 }
 
-func BenchmarkPsliceGetValues(b *testing.B) {
+func BenchmarkGetValues(b *testing.B) {
 	filename := "/tmp/data.txt"
 	length := int64(b.N)
 	defer os.Remove(filename)
 
-	slice, err := NewPslice(filename, length)
+	slice, err := New(filename, length)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -169,12 +169,12 @@ func BenchmarkPsliceGetValues(b *testing.B) {
 	slice.Close()
 }
 
-func BenchmarkPsliceGetSameValueWithSmallSize(b *testing.B) {
+func BenchmarkGetSameValueWithSmallSize(b *testing.B) {
 	filename := "/tmp/data.txt"
 	var length int64 = 10
 	defer os.Remove(filename)
 
-	slice, err := NewPslice(filename, length)
+	slice, err := New(filename, length)
 	if err != nil {
 		b.Fatal(err)
 	}
