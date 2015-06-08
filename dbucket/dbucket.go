@@ -17,6 +17,7 @@ const (
 )
 
 var (
+	ErrBucketNotInDisk = errors.New("bucket is not found on disk")
 	ErrWriteOnReadOnly = errors.New("write operation on a read only bucket")
 )
 
@@ -63,9 +64,11 @@ func New(opts Options) (bkt *DBucket, err error) {
 		opts.DatabaseName+"_"+strconv.Itoa(int(opts.BaseTime)),
 	)
 
-	err = os.MkdirAll(basePath, FilePermissions)
-	if err != nil {
-		return nil, err
+	if !opts.ReadOnly {
+		err = os.MkdirAll(basePath, FilePermissions)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	idxPath := path.Join(basePath, "index")
@@ -75,6 +78,12 @@ func New(opts Options) (bkt *DBucket, err error) {
 	})
 
 	if err != nil {
+		// TODO: use a better way to check whether a bucket
+		// really exists on the disk.
+		if os.IsNotExist(err) {
+			err = ErrBucketNotInDisk
+		}
+
 		return nil, err
 	}
 
@@ -157,20 +166,6 @@ func (bkt *DBucket) Get(start, end int64, vals []string) (res [][]byte, err erro
 
 	spos := bkt.tsToPPos(start)
 	epos := bkt.tsToPPos(end)
-
-	// if data is not available
-	// send an empty payload
-	if el == nil {
-		size := int(epos - spos)
-		pld := make([]byte, bkt.PayloadSize, bkt.PayloadSize)
-		res = make([][]byte, size, size)
-
-		for i := 0; i < size; i++ {
-			res[i] = pld
-		}
-
-		return res, nil
-	}
 
 	res, err = bkt.block.Get(el.Position, spos, epos)
 	if err != nil {

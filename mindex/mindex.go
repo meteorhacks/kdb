@@ -57,6 +57,11 @@ type MIndex struct {
 func NewMIndex(opts MIndexOpts) (idx *MIndex, err error) {
 	file, err := os.OpenFile(opts.FilePath, MIndexFMode, MIndexFPerms)
 	if err != nil {
+		// A not found error will be thrown here if the bucket which
+		// is creating this index does not exist in the filesystem.
+		// This is currently used to identify whether the bucket is
+		// available in the disk (which is a terrible thing to do).
+		// TODO: use a better way to find buckets not in the disk.
 		return nil, err
 	}
 
