@@ -1,6 +1,7 @@
 package dbucket
 
 import (
+	"errors"
 	"os"
 	"path"
 	"strconv"
@@ -8,10 +9,15 @@ import (
 	"github.com/meteorhacks/kdb"
 	"github.com/meteorhacks/kdb/dblock"
 	"github.com/meteorhacks/kdb/mindex"
+	"github.com/meteorhacks/kdb/rblock"
 )
 
 const (
 	FilePermissions = 0744
+)
+
+var (
+	ErrWriteOnReadOnly = errors.New("write operation on a read only bucket")
 )
 
 type Options struct {
@@ -37,6 +43,9 @@ type Options struct {
 
 	// number of records per segment
 	SegmentSize int64
+
+	// read only bucket (less RAM usage)
+	ReadOnly bool
 
 	// base timestamp
 	BaseTime int64
@@ -71,13 +80,23 @@ func New(opts Options) (bkt *DBucket, err error) {
 
 	// number of payloads in a record
 	pldCount := opts.BucketDuration / opts.Resolution
+	var block kdb.Block
 
-	block, err := dblock.New(dblock.Options{
-		BlockPath:    basePath,
-		PayloadSize:  opts.PayloadSize,
-		PayloadCount: pldCount,
-		SegmentSize:  opts.SegmentSize,
-	})
+	if opts.ReadOnly {
+		block, err = rblock.New(rblock.Options{
+			BlockPath:    basePath,
+			PayloadSize:  opts.PayloadSize,
+			PayloadCount: pldCount,
+			SegmentSize:  opts.SegmentSize,
+		})
+	} else {
+		block, err = dblock.New(dblock.Options{
+			BlockPath:    basePath,
+			PayloadSize:  opts.PayloadSize,
+			PayloadCount: pldCount,
+			SegmentSize:  opts.SegmentSize,
+		})
+	}
 
 	if err != nil {
 		return nil, err
@@ -89,6 +108,10 @@ func New(opts Options) (bkt *DBucket, err error) {
 
 // Put adds new data to correct index and block
 func (bkt *DBucket) Put(ts int64, vals []string, pld []byte) (err error) {
+	if bkt.ReadOnly {
+		return ErrWriteOnReadOnly
+	}
+
 	var rpos int64
 
 	index := bkt.index

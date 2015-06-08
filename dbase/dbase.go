@@ -3,14 +3,16 @@ package dbase
 import (
 	"errors"
 	"strings"
-	"time"
 
 	"github.com/meteorhacks/kdb"
+	"github.com/meteorhacks/kdb/clock"
 	"github.com/meteorhacks/kdb/dbucket"
+	"github.com/meteorhacks/kdb/queue"
 )
 
 const (
-	MaxHotBuckets = 2
+	MaxHotBuckets  = 2
+	MaxColdBuckets = 4
 )
 
 var (
@@ -53,7 +55,8 @@ type DBase struct {
 	// only a preset number of buckets may be in memory at a time.
 	// If maximum number of buckets exceeds `MaxHotBuckets`
 	// the bucket with oldest base timestamp will be removed form memory
-	Buckets map[int64]kdb.Bucket
+	HBuckets queue.Queue
+	CBuckets queue.Queue
 
 	// empty slice with enough empty payloads to fill a bucket
 	// used to fill result when bucket doesn't have required data
@@ -73,13 +76,34 @@ func New(opts Options) (db *DBase, err error) {
 		emptyOut[i] = emptyPld
 	}
 
-	bkts := make(map[int64]kdb.Bucket, MaxHotBuckets)
-	db = &DBase{opts, bkts, emptyOut}
+	hbkts := queue.NewQueue(MaxHotBuckets)
+	cbkts := queue.NewQueue(MaxColdBuckets)
+	db = &DBase{opts, hbkts, cbkts, emptyOut}
 
-	ts := time.Now().UnixNano()
-	if _, err = db.getBucket(ts); err != nil {
-		return nil, err
+	now := clock.Now()
+	var i int64
+
+	// load past few blocks as hot buckets
+	// only these will perform writes
+	for i = 0; i < MaxHotBuckets; i++ {
+		ts := now - i*opts.BucketDuration
+		if _, err = db.getBucket(ts); err != nil {
+			return nil, err
+		}
 	}
+
+	// assuming buckets immediately before earliest hot bucket
+	// will most probably will be used, load them as cold buckets
+	for i = 0; i < MaxColdBuckets; i++ {
+		ts := now - (i+MaxHotBuckets)*opts.BucketDuration
+		if _, err = db.getBucket(ts); err != nil {
+			return nil, err
+		}
+	}
+
+	// start a goroutine to close
+	// all overflowing buckets
+	go db.checkBucketCounts()
 
 	return db, nil
 }
@@ -90,7 +114,7 @@ func (db *DBase) Put(ts int64, vals []string, pld []byte) (err error) {
 	// floor tiemstamps by resolution
 	ts -= ts % db.Resolution
 
-	now := time.Now().UnixNano()
+	now := clock.Now()
 	if ts > now {
 		return ErrInvalidTimestamp
 	}
@@ -127,7 +151,7 @@ func (db *DBase) Get(start, end int64, vals []string) (res [][]byte, err error) 
 	start -= start % db.Resolution
 	end -= end % db.Resolution
 
-	now := time.Now().UnixNano()
+	now := clock.Now()
 	if start > now || end > now || end < start {
 		return nil, ErrInvalidTimestamp
 	}
@@ -194,7 +218,7 @@ func (db *DBase) Find(start, end int64, vals []string) (res map[*kdb.IndexElemen
 	start -= start % db.Resolution
 	end -= end % db.Resolution
 
-	now := time.Now().UnixNano()
+	now := clock.Now()
 	if start > now || end > now || end < start {
 		return nil, ErrInvalidTimestamp
 	}
@@ -275,7 +299,16 @@ func (db *DBase) Find(start, end int64, vals []string) (res map[*kdb.IndexElemen
 }
 
 func (db *DBase) Close() (err error) {
-	for _, bkt := range db.Buckets {
+	for _, val := range db.HBuckets.Flush() {
+		bkt := val.(kdb.Bucket)
+		err = bkt.Close()
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, val := range db.CBuckets.Flush() {
+		bkt := val.(kdb.Bucket)
 		err = bkt.Close()
 		if err != nil {
 			return err
@@ -289,11 +322,25 @@ func (db *DBase) Close() (err error) {
 // If a bucket does not exist, it will be created and added to the map
 func (db *DBase) getBucket(ts int64) (bkt kdb.Bucket, err error) {
 	baseTS := ts - (ts % db.BucketDuration)
-	if bkt, ok := db.Buckets[baseTS]; ok {
+
+	// if a "hot" bucket is available, return the bucket
+	if val, err := db.HBuckets.Get(baseTS); err == nil {
+		bkt := val.(kdb.Bucket)
 		return bkt, nil
 	}
 
-	bkt, err = dbucket.New(dbucket.Options{
+	// if a "cold" bucket is available, return the bucket
+	if val, err := db.CBuckets.Get(baseTS); err == nil {
+		bkt := val.(kdb.Bucket)
+		return bkt, nil
+	}
+
+	nowTS := clock.Now()
+	nowTS -= (nowTS % db.BucketDuration)
+	minTS := nowTS - db.BucketDuration*MaxHotBuckets
+	isHot := baseTS > minTS
+
+	opts := dbucket.Options{
 		DatabaseName:   db.DatabaseName,
 		DataPath:       db.DataPath,
 		IndexDepth:     db.IndexDepth,
@@ -302,15 +349,40 @@ func (db *DBase) getBucket(ts int64) (bkt kdb.Bucket, err error) {
 		Resolution:     db.Resolution,
 		BaseTime:       baseTS,
 		SegmentSize:    db.SegmentSize,
-	})
+	}
 
+	bkts := db.HBuckets
+
+	if !isHot {
+		opts.ReadOnly = true
+		bkts = db.CBuckets
+	}
+
+	bkt, err = dbucket.New(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	db.Buckets[baseTS] = bkt
-	// TODO: make sure hot bucket count is <= `MaxHotBuckets`
-	//       for now, we're just loading all buckets to the ram
+	bkts.Add(baseTS, bkt)
 
 	return bkt, nil
+}
+
+func (db *DBase) checkBucketCounts() {
+	var bkt kdb.Bucket
+	var val interface{}
+	var err error
+
+	for {
+		select {
+		case val = <-db.HBuckets.Out():
+		case val = <-db.CBuckets.Out():
+		}
+
+		bkt = val.(kdb.Bucket)
+		if err = bkt.Close(); err != nil {
+			// handle this error
+			panic(err)
+		}
+	}
 }
