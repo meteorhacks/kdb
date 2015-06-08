@@ -11,7 +11,7 @@ import (
 
 const (
 	// default file permissions and modes
-	FileOpenMode    = os.O_CREATE | os.O_RDWR
+	FileOpenMode    = os.O_RDONLY
 	FilePermissions = 0744
 
 	MetadataCount = 3
