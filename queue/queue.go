@@ -53,13 +53,10 @@ func (q *queue) Add(key int64, val interface{}) (err error) {
 	}
 
 	if q.lnth == q.size {
-		key = q.keys[q.head]
-		val = q.data[key]
-		q.outc <- val
-
-		delete(q.data, key)
-		q.head = (q.head + 1) % q.size
-		q.lnth--
+		k := q.keys[q.head]
+		v := q.data[k]
+		q.outc <- v
+		q.del(k)
 	}
 
 	q.keys[q.tail] = key
@@ -75,6 +72,17 @@ func (q *queue) Get(key int64) (val interface{}, err error) {
 	if !ok {
 		return nil, ErrKeyMissing
 	}
+
+	return val, nil
+}
+
+func (q *queue) Del(key int64) (val interface{}, err error) {
+	val, ok := q.data[key]
+	if !ok {
+		return nil, ErrKeyMissing
+	}
+
+	q.del(key)
 
 	return val, nil
 }
@@ -95,4 +103,10 @@ func (q *queue) Flush() (data map[int64]interface{}) {
 
 func (q *queue) Length() (length int) {
 	return q.lnth
+}
+
+func (q *queue) del(key int64) {
+	delete(q.data, key)
+	q.head = (q.head + 1) % q.size
+	q.lnth--
 }
