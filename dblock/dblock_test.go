@@ -26,10 +26,6 @@ func TestNewDBlockNewData(t *testing.T) {
 	if blk.recordSize != 400 {
 		t.Fatal("record size should be equal to PayloadSize x PayloadCount")
 	}
-
-	if len(blk.emptyRecord) != 400 {
-		t.Fatal("empty record should have correct size")
-	}
 }
 
 // test creating a block struct with an existing block file
@@ -57,10 +53,6 @@ func TestNewDBlockExistingData(t *testing.T) {
 
 	if blk2.recordSize != 400 {
 		t.Fatal("record size should be equal to PayloadSize x PayloadCount")
-	}
-
-	if len(blk2.emptyRecord) != 400 {
-		t.Fatal("empty record should have correct size")
 	}
 }
 
