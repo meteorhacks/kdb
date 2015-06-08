@@ -2,7 +2,6 @@ package dbase
 
 import (
 	"errors"
-	"fmt"
 	"os/exec"
 	"reflect"
 	"testing"
@@ -13,16 +12,18 @@ import (
 // A test clock is used to control the time
 // hot time range:  10000 --- 12000
 // anything below 10000 is cold
+// cold data available at 30
 // anything above 11999 is future
 func createTestDbase() (db *DBase, err error) {
-	clock.UseTestClock(11999)
+	clock.UseTestClock(40)
+	defer clock.UseTestClock(11999)
 
 	cmd := exec.Command("rm", "-rf", "/tmp/test-dbase")
 	if err := cmd.Run(); err != nil {
 		return nil, err
 	}
 
-	db, err = New(Options{
+	opts := Options{
 		DatabaseName:   "test",
 		DataPath:       "/tmp/test-dbase/",
 		IndexDepth:     4,
@@ -30,8 +31,29 @@ func createTestDbase() (db *DBase, err error) {
 		BucketDuration: 1000,
 		Resolution:     10,
 		SegmentSize:    10,
-	})
+	}
 
+	db, err = New(opts)
+	if err == nil && db == nil {
+		err = errors.New("database should not be nil")
+		return nil, err
+	}
+
+	// test cold data
+	val := []string{"a", "b", "c", "d"}
+	pld := []byte{3, 0, 3, 0}
+
+	if err := db.Put(30, val, pld); err != nil {
+		return nil, err
+	}
+
+	db.Close()
+
+	clock.UseTestClock(11999)
+
+	// open the database again so cold bucket
+	// is not ready when running tests
+	db, err = New(opts)
 	if err == nil && db == nil {
 		err = errors.New("database should not be nil")
 		return nil, err
@@ -40,6 +62,8 @@ func createTestDbase() (db *DBase, err error) {
 	return db, err
 }
 
+// deletes all files created for test db
+// should be run at the end of each test
 func cleanTestFiles() {
 	cmd := exec.Command("rm", "-rf", "/tmp/test-dbase")
 	cmd.Run()
@@ -62,13 +86,17 @@ func TestNewDBaseNewData(t *testing.T) {
 		t.Fatal("number of hot buckets !=", MaxHotBuckets)
 	}
 
-	if db.CBuckets.Length() != MaxColdBuckets {
-		fmt.Println(db.CBuckets.Length())
-		t.Fatal("number of cold buckets !=", MaxColdBuckets)
+	if db.CBuckets.Length() != 0 {
+		t.Fatal("number of cold buckets !=", 0)
 	}
 
-	if _, err := db.HBuckets.Get(11000); err != nil {
-		t.Fatal("correct bucket should be loaded")
+	var i int64
+	for i = 0; i < MaxHotBuckets; i++ {
+		ts := clock.Now() - i*db.BucketDuration
+		ts -= ts % db.BucketDuration
+		if _, err := db.HBuckets.Get(ts); err != nil {
+			t.Fatal("correct bucket should be loaded")
+		}
 	}
 }
 
@@ -93,12 +121,17 @@ func TestNewDBaseExistingData(t *testing.T) {
 		t.Fatal("number of hot buckets !=", MaxHotBuckets)
 	}
 
-	if db.CBuckets.Length() != MaxColdBuckets {
-		t.Fatal("number of cold buckets !=", MaxColdBuckets)
+	if db.CBuckets.Length() != 0 {
+		t.Fatal("number of cold buckets !=", 0)
 	}
 
-	if _, err := db.HBuckets.Get(11000); err != nil {
-		t.Fatal("correct bucket should be loaded")
+	var i int64
+	for i = 0; i < MaxHotBuckets; i++ {
+		ts := clock.Now() - i*db.BucketDuration
+		ts -= ts % db.BucketDuration
+		if _, err := db.HBuckets.Get(ts); err != nil {
+			t.Fatal("correct bucket should be loaded")
+		}
 	}
 }
 

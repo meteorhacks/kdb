@@ -18,7 +18,6 @@ const (
 var (
 	ErrInvalidParams      = errors.New("invalid params")
 	ErrInvalidTimestamp   = errors.New("value came from future")
-	ErrInvalidPartition   = errors.New("partition number is invalid")
 	ErrInvalidIndexValues = errors.New("invalid index values")
 	ErrInvalidPayload     = errors.New("invalid payload size")
 )
@@ -81,11 +80,16 @@ func New(opts Options) (db *DBase, err error) {
 	db = &DBase{opts, hbkts, cbkts, emptyOut}
 
 	now := clock.Now()
+	now -= now % db.BucketDuration
+
+	minHot := now - opts.BucketDuration*(MaxHotBuckets-1)
+	minCold := minHot - opts.BucketDuration*MaxColdBuckets
+
+	// int64 loop
 	var i int64
 
 	// load past few blocks as hot buckets
 	// only these will perform writes
-	minHot := now - opts.BucketDuration*(MaxHotBuckets-1)
 	for i = 0; i < MaxHotBuckets; i++ {
 		ts := minHot + i*opts.BucketDuration
 		if _, err = db.getBucket(ts); err != nil {
@@ -96,7 +100,6 @@ func New(opts Options) (db *DBase, err error) {
 	// assuming buckets immediately before earliest hot bucket
 	// will most probably will be used, load them as cold buckets
 	// this will load only if buckets already exist on the server
-	minCold := minHot - opts.BucketDuration*MaxColdBuckets
 	for i = 0; i < MaxColdBuckets; i++ {
 		ts := minCold + i*opts.BucketDuration
 		if _, err = db.getBucket(ts); err != nil &&
@@ -178,7 +181,7 @@ func (db *DBase) Get(start, end int64, vals []string) (res [][]byte, err error) 
 
 	for t := bs; t <= be; t += db.BucketDuration {
 		bkt, err := db.getBucket(t)
-		notExist := err != dbucket.ErrBucketNotInDisk
+		notExist := err == dbucket.ErrBucketNotInDisk
 		if err != nil && !notExist {
 			return nil, err
 		}
@@ -243,7 +246,7 @@ func (db *DBase) Find(start, end int64, vals []string) (res map[*kdb.IndexElemen
 
 	for t := bs; t <= be; t += db.BucketDuration {
 		bkt, err := db.getBucket(t)
-		notExist := err != dbucket.ErrBucketNotInDisk
+		notExist := err == dbucket.ErrBucketNotInDisk
 		if err != nil && !notExist {
 			return nil, err
 		} else if notExist {
