@@ -85,8 +85,9 @@ func New(opts Options) (db *DBase, err error) {
 
 	// load past few blocks as hot buckets
 	// only these will perform writes
+	minHot := now - opts.BucketDuration*(MaxHotBuckets-1)
 	for i = 0; i < MaxHotBuckets; i++ {
-		ts := now - i*opts.BucketDuration
+		ts := minHot + i*opts.BucketDuration
 		if _, err = db.getBucket(ts); err != nil {
 			return nil, err
 		}
@@ -94,9 +95,12 @@ func New(opts Options) (db *DBase, err error) {
 
 	// assuming buckets immediately before earliest hot bucket
 	// will most probably will be used, load them as cold buckets
+	// this will load only if buckets already exist on the server
+	minCold := minHot - opts.BucketDuration*MaxColdBuckets
 	for i = 0; i < MaxColdBuckets; i++ {
-		ts := now - (i+MaxHotBuckets)*opts.BucketDuration
-		if _, err = db.getBucket(ts); err != nil {
+		ts := minCold + i*opts.BucketDuration
+		if _, err = db.getBucket(ts); err != nil &&
+			err != dbucket.ErrBucketNotInDisk {
 			return nil, err
 		}
 	}
@@ -174,7 +178,8 @@ func (db *DBase) Get(start, end int64, vals []string) (res [][]byte, err error) 
 
 	for t := bs; t <= be; t += db.BucketDuration {
 		bkt, err := db.getBucket(t)
-		if err != nil {
+		notExist := err != dbucket.ErrBucketNotInDisk
+		if err != nil && !notExist {
 			return nil, err
 		}
 
@@ -202,7 +207,7 @@ func (db *DBase) Get(start, end int64, vals []string) (res [][]byte, err error) 
 			return nil, err
 		}
 
-		if out == nil {
+		if out == nil || notExist {
 			count := (bktEnd - bktStart) / db.Resolution
 			out = db.emptyOut[:count]
 		}
@@ -231,15 +236,18 @@ func (db *DBase) Find(start, end int64, vals []string) (res map[*kdb.IndexElemen
 
 	// number of payoads in final result
 	rs := (end - start) / db.Resolution
-	tmp := make(map[string][][]byte)
+	tmpData := make(map[string][][]byte)
 	tmpVals := make(map[string][]string)
 
 	var bktStart, bktEnd int64
 
 	for t := bs; t <= be; t += db.BucketDuration {
 		bkt, err := db.getBucket(t)
-		if err != nil {
+		notExist := err != dbucket.ErrBucketNotInDisk
+		if err != nil && !notExist {
 			return nil, err
+		} else if notExist {
+			continue
 		}
 
 		if t == bs {
@@ -269,7 +277,7 @@ func (db *DBase) Find(start, end int64, vals []string) (res map[*kdb.IndexElemen
 		for el, plds := range out {
 			key := strings.Join(el.Values, "-")
 
-			set, ok := tmp[key]
+			set, ok := tmpData[key]
 			if !ok {
 				set = make([][]byte, rs, rs)
 
@@ -278,7 +286,7 @@ func (db *DBase) Find(start, end int64, vals []string) (res map[*kdb.IndexElemen
 					set[i] = make([]byte, db.PayloadSize)
 				}
 
-				tmp[key] = set
+				tmpData[key] = set
 				tmpVals[key] = el.Values
 			}
 
@@ -292,7 +300,7 @@ func (db *DBase) Find(start, end int64, vals []string) (res map[*kdb.IndexElemen
 	res = make(map[*kdb.IndexElement][][]byte)
 	for key, val := range tmpVals {
 		el := &kdb.IndexElement{Values: val}
-		res[el] = tmp[key]
+		res[el] = tmpData[key]
 	}
 
 	return res, nil
@@ -369,18 +377,16 @@ func (db *DBase) getBucket(ts int64) (bkt kdb.Bucket, err error) {
 }
 
 func (db *DBase) checkBucketCounts() {
-	var bkt kdb.Bucket
-	var val interface{}
-	var err error
-
 	for {
+		var val interface{}
+
 		select {
 		case val = <-db.HBuckets.Out():
 		case val = <-db.CBuckets.Out():
 		}
 
-		bkt = val.(kdb.Bucket)
-		if err = bkt.Close(); err != nil {
+		bkt := val.(kdb.Bucket)
+		if err := bkt.Close(); err != nil {
 			// handle this error
 			panic(err)
 		}
