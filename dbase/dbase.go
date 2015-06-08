@@ -2,6 +2,10 @@ package dbase
 
 import (
 	"errors"
+	"io/ioutil"
+	"os/exec"
+	"path"
+	"strconv"
 	"strings"
 
 	"github.com/meteorhacks/kdb"
@@ -20,6 +24,7 @@ var (
 	ErrInvalidTimestamp   = errors.New("value came from future")
 	ErrInvalidIndexValues = errors.New("invalid index values")
 	ErrInvalidPayload     = errors.New("invalid payload size")
+	ErrRemoveHotBucket    = errors.New("can't remove hot bucket")
 )
 
 type Options struct {
@@ -180,12 +185,6 @@ func (db *DBase) Get(start, end int64, vals []string) (res [][]byte, err error) 
 	var bktStart, bktEnd int64
 
 	for t := bs; t <= be; t += db.BucketDuration {
-		bkt, err := db.getBucket(t)
-		notExist := err == dbucket.ErrBucketNotInDisk
-		if err != nil && !notExist {
-			return nil, err
-		}
-
 		if t == bs {
 			// if it's the first bucket
 			// skip payloads before `start` time
@@ -205,14 +204,23 @@ func (db *DBase) Get(start, end int64, vals []string) (res [][]byte, err error) 
 			bktEnd = t + db.BucketDuration
 		}
 
-		out, err := bkt.Get(bktStart, bktEnd, vals)
-		if err != nil {
+		count := (bktEnd - bktStart) / db.Resolution
+		out := db.emptyOut[:count]
+
+		bkt, err := db.getBucket(t)
+		if err != nil && err != dbucket.ErrBucketNotInDisk {
 			return nil, err
 		}
 
-		if out == nil || notExist {
-			count := (bktEnd - bktStart) / db.Resolution
-			out = db.emptyOut[:count]
+		if err == nil {
+			out, err = bkt.Get(bktStart, bktEnd, vals)
+			if err != nil {
+				return nil, err
+			}
+
+			if out == nil {
+				out = db.emptyOut[:count]
+			}
 		}
 
 		res = append(res, out...)
@@ -247,10 +255,12 @@ func (db *DBase) Find(start, end int64, vals []string) (res map[*kdb.IndexElemen
 	for t := bs; t <= be; t += db.BucketDuration {
 		bkt, err := db.getBucket(t)
 		notExist := err == dbucket.ErrBucketNotInDisk
-		if err != nil && !notExist {
+		if err != nil {
+			if notExist {
+				continue
+			}
+
 			return nil, err
-		} else if notExist {
-			continue
 		}
 
 		if t == bs {
@@ -307,6 +317,49 @@ func (db *DBase) Find(start, end int64, vals []string) (res map[*kdb.IndexElemen
 	}
 
 	return res, nil
+}
+
+func (db *DBase) RemoveBefore(ts int64) (err error) {
+	now := clock.Now()
+	now -= now % db.BucketDuration
+	min := now - db.BucketDuration*(MaxHotBuckets-1)
+	pfx := db.DatabaseName + "_"
+
+	if ts > min {
+		return ErrRemoveHotBucket
+	}
+
+	files, _ := ioutil.ReadDir(db.DataPath)
+	for _, f := range files {
+		name := f.Name()
+
+		if !strings.HasPrefix(name, pfx) {
+			continue
+		}
+
+		tsStr := strings.TrimPrefix(name, pfx)
+		tsInt, err := strconv.ParseInt(tsStr, 10, 64)
+		if err != nil {
+			return err
+		}
+
+		if tsInt >= ts {
+			continue
+		}
+
+		_, err = db.CBuckets.Del(tsInt)
+		if err != nil && err != queue.ErrKeyMissing {
+			return err
+		}
+
+		bpath := path.Join(db.DataPath, name)
+		cmd := exec.Command("rm", "-rf", bpath)
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (db *DBase) Close() (err error) {

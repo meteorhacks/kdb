@@ -12,10 +12,11 @@ import (
 // A test clock is used to control the time
 // hot time range:  10000 --- 12000
 // anything below 10000 is cold
-// cold data available at 30
+// default cold loaded from 6000
+// cold data available at 3030 and 6060
 // anything above 11999 is future
 func createTestDbase() (db *DBase, err error) {
-	clock.UseTestClock(40)
+	clock.UseTestClock(3999)
 	defer clock.UseTestClock(11999)
 
 	cmd := exec.Command("rm", "-rf", "/tmp/test-dbase")
@@ -40,17 +41,23 @@ func createTestDbase() (db *DBase, err error) {
 	}
 
 	// test cold data
-	val := []string{"a", "b", "c", "d"}
-	pld := []byte{3, 0, 3, 0}
+	vals := []string{"a", "b", "c", "d"}
+	pld1 := []byte{3, 0, 3, 0}
+	pld2 := []byte{6, 0, 6, 0}
 
-	if err := db.Put(30, val, pld); err != nil {
+	if err := db.Put(3030, vals, pld1); err != nil {
+		return nil, err
+	}
+
+	clock.UseTestClock(6999)
+	if err := db.Put(6060, vals, pld2); err != nil {
 		return nil, err
 	}
 
 	db.Close()
 
 	clock.UseTestClock(11999)
-
+	// set time to test present time
 	// open the database again so cold bucket
 	// is not ready when running tests
 	db, err = New(opts)
@@ -86,8 +93,8 @@ func TestNewDBaseNewData(t *testing.T) {
 		t.Fatal("number of hot buckets !=", MaxHotBuckets)
 	}
 
-	if db.CBuckets.Length() != 0 {
-		t.Fatal("number of cold buckets !=", 0)
+	if db.CBuckets.Length() != 1 {
+		t.Fatal("number of cold buckets !=", 1)
 	}
 
 	var i int64
@@ -121,8 +128,8 @@ func TestNewDBaseExistingData(t *testing.T) {
 		t.Fatal("number of hot buckets !=", MaxHotBuckets)
 	}
 
-	if db.CBuckets.Length() != 0 {
-		t.Fatal("number of cold buckets !=", 0)
+	if db.CBuckets.Length() != 1 {
+		t.Fatal("number of cold buckets !=", 1)
 	}
 
 	var i int64
@@ -203,7 +210,7 @@ func TestPut(t *testing.T) {
 	}
 }
 
-func TestGetHot(t *testing.T) {
+func TestGet(t *testing.T) {
 	defer cleanTestFiles()
 
 	db, err := createTestDbase()
@@ -214,20 +221,34 @@ func TestGetHot(t *testing.T) {
 	defer db.Close()
 
 	vals := []string{"a", "b", "c", "d"}
-	pld0 := []byte{0, 0, 0, 0}
-	pld := []byte{1, 2, 3, 4}
+	pld1 := []byte{6, 0, 6, 0}
+	pld2 := []byte{3, 0, 3, 0}
+	pld3 := []byte{1, 2, 3, 4}
 
 	// try getting from a cold bucket
-	res, err := db.Get(10, 20, vals)
+	// this will be already in memory
+	res, err := db.Get(6060, 6070, vals)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(res) != 1 || !reflect.DeepEqual(res[0], pld0) {
+	if len(res) != 1 || !reflect.DeepEqual(res[0], pld1) {
 		t.Fatal("invalid data")
 	}
 
-	err = db.Put(10999, vals, pld)
+	// try getting from a cold bucket
+	// this will be loaded on request
+	res, err = db.Get(3030, 3040, vals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(res) != 1 || !reflect.DeepEqual(res[0], pld2) {
+		t.Fatal("invalid data")
+	}
+
+	// put some data on hot zone
+	err = db.Put(10999, vals, pld3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +258,7 @@ func TestGetHot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(res) != 1 || !reflect.DeepEqual(res[0], pld) {
+	if len(res) != 1 || !reflect.DeepEqual(res[0], pld3) {
 		t.Fatal("invalid data")
 	}
 
@@ -315,6 +336,54 @@ func TestFind(t *testing.T) {
 		} else {
 			t.Fatal("invalid index values")
 		}
+	}
+}
+
+func TestRemoveBefore(t *testing.T) {
+	defer cleanTestFiles()
+
+	db, err := createTestDbase()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer db.Close()
+
+	err = db.RemoveBefore(10001)
+	if err != ErrRemoveHotBucket {
+		t.Fatal("should return correct error")
+	}
+
+	// createTestDbase adds data at 3030 and 6060
+	// 6060 is in loaded as a cold bucket
+	// 3030 is not loaded into memory
+
+	err = db.RemoveBefore(4000)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vals := []string{"a", "b", "c", "d"}
+	pld0 := []byte{0, 0, 0, 0}
+
+	res, err := db.Get(3030, 3040, vals)
+	if err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(res[0], pld0) {
+		t.Fatal("data should be removed")
+	}
+
+	// remove cold bucket
+	err = db.RemoveBefore(7000)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err = db.Get(6060, 6070, vals)
+	if err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(res[0], pld0) {
+		t.Fatal("data should be removed")
 	}
 }
 

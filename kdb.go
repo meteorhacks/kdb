@@ -7,6 +7,10 @@ type Database interface {
 	Put(ts int64, vals []string, pld []byte) (err error)
 	Get(start, end int64, vals []string) (res [][]byte, err error)
 	Find(start, end int64, vals []string) (res map[*IndexElement][][]byte, err error)
+
+	// remove all data before given timestamp
+	RemoveBefore(ts int64) (err error)
+
 	Close() (err error)
 }
 
