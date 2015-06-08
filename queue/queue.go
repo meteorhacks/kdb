@@ -13,6 +13,7 @@ var (
 type Queue interface {
 	Add(key int64, val interface{}) (err error)
 	Get(key int64) (val interface{}, err error)
+	Del(key int64) (val interface{}, err error)
 	Out() (ch <-chan interface{})
 	Flush() (data map[int64]interface{})
 
