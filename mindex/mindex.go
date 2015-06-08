@@ -36,9 +36,6 @@ type MIndexOpts struct {
 
 	// depth of the index tree
 	IndexDepth int64
-
-	// partition number
-	PartitionNo int64
 }
 
 // Base struct of the MIndex
