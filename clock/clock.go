@@ -5,23 +5,19 @@ import (
 )
 
 var (
-	C Clock
-	R = &RealClock{}
-	T = &TestClock{}
+	C Clock = R
+	R       = &RealClock{}
+	T       = &TestClock{}
 )
 
-func init() {
-	C = R
-}
-
 type Clock interface {
-	Now() (now int64)
+	Now() (ts int64)
 }
 
 type RealClock struct {
 }
 
-func (c *RealClock) Now() (now int64) {
+func (c *RealClock) Now() (ts int64) {
 	return time.Now().UnixNano()
 }
 
@@ -29,15 +25,22 @@ type TestClock struct {
 	ts int64
 }
 
-func (c *TestClock) Now() (now int64) {
+func (c *TestClock) Now() (ts int64) {
 	return c.ts
 }
 
-func Now() (now int64) {
+func Now() (ts int64) {
 	return C.Now()
 }
 
-func UseTestClock(now int64) {
+func UseRealClock() {
+	C = R
+}
+
+func UseTestClock() {
 	C = T
-	T.ts = now
+}
+
+func Goto(ts int64) {
+	T.ts = ts
 }

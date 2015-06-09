@@ -16,8 +16,9 @@ import (
 // cold data available at 3030 and 6060
 // anything above 11999 is future
 func createTestDbase() (db *DBase, err error) {
-	clock.UseTestClock(3999)
-	defer clock.UseTestClock(11999)
+	clock.UseTestClock()
+	clock.Goto(3999)
+	defer clock.Goto(11999)
 
 	cmd := exec.Command("rm", "-rf", "/tmp/test-dbase")
 	if err := cmd.Run(); err != nil {
@@ -49,14 +50,14 @@ func createTestDbase() (db *DBase, err error) {
 		return nil, err
 	}
 
-	clock.UseTestClock(6999)
+	clock.Goto(6999)
 	if err := db.Put(6060, vals, pld2); err != nil {
 		return nil, err
 	}
 
 	db.Close()
 
-	clock.UseTestClock(11999)
+	clock.Goto(11999)
 	// set time to test present time
 	// open the database again so cold bucket
 	// is not ready when running tests
