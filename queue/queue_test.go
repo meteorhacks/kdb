@@ -47,3 +47,45 @@ func TestAddFull(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkAdd(b *testing.B) {
+	q := newQueue(b.N)
+
+	var i int64
+	var N int64 = int64(b.N)
+	b.ResetTimer()
+
+	for i = 0; i < N; i++ {
+		q.Add(i, 10)
+	}
+}
+
+func BenchmarkGet(b *testing.B) {
+	q := newQueue(b.N)
+
+	var i int64
+	var N int64 = int64(b.N)
+	for i = 0; i < N; i++ {
+		q.Add(i, 10)
+	}
+
+	b.ResetTimer()
+	for i = 0; i < N; i++ {
+		q.Get(i)
+	}
+}
+
+func BenchmarkDel(b *testing.B) {
+	q := newQueue(b.N)
+
+	var i int64
+	var N int64 = int64(b.N)
+	for i = 0; i < N; i++ {
+		q.Add(i, 10)
+	}
+
+	b.ResetTimer()
+	for i = 0; i < N; i++ {
+		q.Del(i)
+	}
+}

@@ -5,7 +5,9 @@ import (
 )
 
 func TestTestClock(t *testing.T) {
-	UseTestClock(123)
+	UseTestClock()
+
+	Goto(123)
 	if Now() != 123 {
 		t.Fatal("test clock should return preset value")
 	}
