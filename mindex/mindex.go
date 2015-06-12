@@ -11,6 +11,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/glycerine/go-capnproto"
 	"github.com/meteorhacks/kdb"
 )
 
@@ -184,8 +185,6 @@ func (idx *MIndex) Close() (err error) {
 // loads index data from a file containing protobuf encoded index elements
 // TODO: handle corrupt index files (load valid index points)
 func (idx *MIndex) load() (err error) {
-	idxEl := MIndexEl{}
-
 	err = idx.loadData(0, idx.totalFileSize)
 	if err != nil {
 		return err
@@ -195,22 +194,10 @@ func (idx *MIndex) load() (err error) {
 	dataSize := int64(len(data))
 	var offset int64 = 0
 
-	// decode index elements one by one from the index file
-	for {
-		if offset == dataSize {
-			break
-		}
-
-		// reset `idxEl` struct values
-		// reuse to avoid memory allocations
-		idxEl.Position = nil
-		idxEl.Values = nil
-
+	for offset != dataSize {
 		// read element header (element size as int64) from data
 		sizeData := data[offset : offset+MIndexElHeaderSize]
-
 		idxElSize, n := binary.Varint(sizeData)
-
 		if n <= 0 {
 			return ErrMIndexBytesReadFromBuffer
 		}
@@ -222,25 +209,24 @@ func (idx *MIndex) load() (err error) {
 			return errors.New("data size is too small to filled into protobuf")
 		}
 
-		idxElData := data[start:end]
-
-		err = idxEl.Unmarshal(idxElData)
-		// we've reached to the end of the data
-		if err != nil {
+		seg := capn.NewBuffer(data[start:end])
+		if len(seg.Data) == 0 {
+			// invalid data
 			break
 		}
 
-		// set offset to point to the end of bytes already read
-		offset += MIndexElHeaderSize + idxElSize + MIndexPaddingSize
-
+		mel := ReadRootMIndexEl(seg)
 		el := &kdb.IndexElement{
-			Position: *idxEl.Position,
-			Values:   idxEl.Values,
+			Position: mel.Position(),
+			Values:   mel.Values().ToArray(),
 		}
 
 		if err = idx.addElement(el); err != nil {
 			return err
 		}
+
+		// set offset to point to the end of bytes already read
+		offset += MIndexElHeaderSize + idxElSize
 	}
 
 	idx.currentFileSize = offset
@@ -292,37 +278,46 @@ func (idx *MIndex) addElement(el *kdb.IndexElement) (err error) {
 
 // Element is saved in format [size element padding]
 func (idx *MIndex) saveElement(el *kdb.IndexElement) (err error) {
-	mel := MIndexEl{
-		Position: &el.Position,
-		Values:   el.Values,
+	// TODO: prevent this alloc
+	seg := capn.NewBuffer(nil)
+	mel := NewRootMIndexEl(seg)
+	mel.SetPosition(el.Position)
+
+	sz := len(el.Values)
+	val := seg.NewTextList(sz)
+	for i := 0; i < sz; i++ {
+		val.Set(i, el.Values[i])
 	}
 
-	elementSize := mel.Size()
-	totalSize := int64(MIndexElHeaderSize + elementSize + MIndexPaddingSize)
-	data := make([]byte, totalSize, totalSize)
-
-	// add the element header (int64 of element size)
-	binary.PutVarint(data, int64(elementSize))
+	mel.SetValues(val)
 
 	// add the protobuffer encoded element to the payload
-	elData := data[MIndexElHeaderSize : MIndexElHeaderSize+elementSize]
-	n, err := mel.MarshalTo(elData)
-	if err != nil {
-		return err
-	} else if n != elementSize {
-		return ErrMIndexBytesWrittenToBuffer
-	}
+	data := []byte(seg.Data)
+	elSz := int64(len(data))
 
-	// add the padding at the end of the payload
-	copy(data[MIndexElHeaderSize+elementSize:], MIndexPadding)
+	// add the element header (int64 of element size)
+	header := make([]byte, MIndexElHeaderSize, MIndexElHeaderSize)
+	binary.PutVarint(header, elSz)
 
-	idx.preAllocateIfNeeded(totalSize)
+	// preallocate space on disk
+	dtSz := elSz + MIndexElHeaderSize
+	idx.preAllocateIfNeeded(dtSz)
 
 	// finally, write the payload to the file
 	offset := idx.currentFileSize
 	idx.mutex.Lock()
 
 	var lc int64 = 0
+
+	for lc = 0; lc < int64(MIndexElHeaderSize); lc++ {
+		// We may read from a different offset and didn't start from the begining
+		// In that case, we need to reduce the mmap starting point from the offset
+		pos := offset + lc - idx.mmapedOffset
+		idx.mmapedData[pos] = header[lc]
+	}
+
+	offset += MIndexElHeaderSize
+
 	for lc = 0; lc < int64(len(data)); lc++ {
 		// We may read from a different offset and didn't start from the begining
 		// In that case, we need to reduce the mmap starting point from the offset
@@ -330,7 +325,7 @@ func (idx *MIndex) saveElement(el *kdb.IndexElement) (err error) {
 		idx.mmapedData[pos] = data[lc]
 	}
 
-	idx.currentFileSize += totalSize
+	idx.currentFileSize += dtSz
 	idx.mutex.Unlock()
 	runtime.Gosched()
 
@@ -391,5 +386,6 @@ func (idx *MIndex) loadData(start, end int64) (err error) {
 
 	idx.mmapedData = data
 	idx.mmapedOffset = start
+
 	return nil
 }
