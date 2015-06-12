@@ -19,9 +19,9 @@ import time "time"
 import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 import encoding_json "encoding/json"
 
-func TestMIndexElementProto(t *testing.T) {
+func TestMIndexElProto(t *testing.T) {
 	popr := math_rand.New(math_rand.NewSource(time.Now().UnixNano()))
-	p := NewPopulatedMIndexElement(popr, false)
+	p := NewPopulatedMIndexEl(popr, false)
 	data, err := github_com_gogo_protobuf_proto.Marshal(p)
 	if err != nil {
 		panic(err)
@@ -38,9 +38,9 @@ func TestMIndexElementProto(t *testing.T) {
 	}
 }
 
-func TestMIndexElementMarshalTo(t *testing.T) {
+func TestMIndexElMarshalTo(t *testing.T) {
 	popr := math_rand.New(math_rand.NewSource(time.Now().UnixNano()))
-	p := NewPopulatedMIndexElement(popr, false)
+	p := NewPopulatedMIndexEl(popr, false)
 	size := p.Size()
 	data := make([]byte, size)
 	for i := range data {
@@ -62,12 +62,12 @@ func TestMIndexElementMarshalTo(t *testing.T) {
 	}
 }
 
-func BenchmarkMIndexElementProtoMarshal(b *testing.B) {
+func BenchmarkMIndexElProtoMarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
 	pops := make([]*MIndexEl, 10000)
 	for i := 0; i < 10000; i++ {
-		pops[i] = NewPopulatedMIndexElement(popr, false)
+		pops[i] = NewPopulatedMIndexEl(popr, false)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -80,12 +80,12 @@ func BenchmarkMIndexElementProtoMarshal(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func BenchmarkMIndexElementProtoUnmarshal(b *testing.B) {
+func BenchmarkMIndexElProtoUnmarshal(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
 	datas := make([][]byte, 10000)
 	for i := 0; i < 10000; i++ {
-		data, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedMIndexElement(popr, false))
+		data, err := github_com_gogo_protobuf_proto.Marshal(NewPopulatedMIndexEl(popr, false))
 		if err != nil {
 			panic(err)
 		}
@@ -102,9 +102,9 @@ func BenchmarkMIndexElementProtoUnmarshal(b *testing.B) {
 	b.SetBytes(int64(total / b.N))
 }
 
-func TestMIndexElementJSON(t *testing.T) {
+func TestMIndexElJSON(t *testing.T) {
 	popr := math_rand.New(math_rand.NewSource(time.Now().UnixNano()))
-	p := NewPopulatedMIndexElement(popr, true)
+	p := NewPopulatedMIndexEl(popr, true)
 	jsondata, err := encoding_json.Marshal(p)
 	if err != nil {
 		panic(err)
@@ -118,9 +118,9 @@ func TestMIndexElementJSON(t *testing.T) {
 		t.Fatalf("%#v !Json Equal %#v", msg, p)
 	}
 }
-func TestMIndexElementProtoText(t *testing.T) {
+func TestMIndexElProtoText(t *testing.T) {
 	popr := math_rand.New(math_rand.NewSource(time.Now().UnixNano()))
-	p := NewPopulatedMIndexElement(popr, true)
+	p := NewPopulatedMIndexEl(popr, true)
 	data := github_com_gogo_protobuf_proto.MarshalTextString(p)
 	msg := &MIndexEl{}
 	if err := github_com_gogo_protobuf_proto.UnmarshalText(data, msg); err != nil {
@@ -131,9 +131,9 @@ func TestMIndexElementProtoText(t *testing.T) {
 	}
 }
 
-func TestMIndexElementProtoCompactText(t *testing.T) {
+func TestMIndexElProtoCompactText(t *testing.T) {
 	popr := math_rand.New(math_rand.NewSource(time.Now().UnixNano()))
-	p := NewPopulatedMIndexElement(popr, true)
+	p := NewPopulatedMIndexEl(popr, true)
 	data := github_com_gogo_protobuf_proto.CompactTextString(p)
 	msg := &MIndexEl{}
 	if err := github_com_gogo_protobuf_proto.UnmarshalText(data, msg); err != nil {
@@ -144,9 +144,9 @@ func TestMIndexElementProtoCompactText(t *testing.T) {
 	}
 }
 
-func TestMIndexElementSize(t *testing.T) {
+func TestMIndexElSize(t *testing.T) {
 	popr := math_rand.New(math_rand.NewSource(time.Now().UnixNano()))
-	p := NewPopulatedMIndexElement(popr, true)
+	p := NewPopulatedMIndexEl(popr, true)
 	size2 := github_com_gogo_protobuf_proto.Size(p)
 	data, err := github_com_gogo_protobuf_proto.Marshal(p)
 	if err != nil {
@@ -165,12 +165,12 @@ func TestMIndexElementSize(t *testing.T) {
 	}
 }
 
-func BenchmarkMIndexElementSize(b *testing.B) {
+func BenchmarkMIndexElSize(b *testing.B) {
 	popr := math_rand.New(math_rand.NewSource(616))
 	total := 0
 	pops := make([]*MIndexEl, 1000)
 	for i := 0; i < 1000; i++ {
-		pops[i] = NewPopulatedMIndexElement(popr, false)
+		pops[i] = NewPopulatedMIndexEl(popr, false)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

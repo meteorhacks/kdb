@@ -158,7 +158,7 @@ func sovMindex(x uint64) (n int) {
 func sozMindex(x uint64) (n int) {
 	return sovMindex(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func NewPopulatedMIndexElement(r randyMindex, easy bool) *MIndexEl {
+func NewPopulatedMIndexEl(r randyMindex, easy bool) *MIndexEl {
 	this := &MIndexEl{}
 	v1 := r.Int63()
 	if r.Intn(2) == 0 {
