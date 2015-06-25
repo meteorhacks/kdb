@@ -164,7 +164,8 @@ func (db *DBase) Get(start, end int64, vals []string) (res [][]byte, err error) 
 	end -= end % db.Resolution
 
 	now := clock.Now()
-	if start > now || end > now || end < start {
+	last := end - db.Resolution
+	if start > now || last > now || end < start {
 		return nil, ErrInvalidTimestamp
 	}
 
