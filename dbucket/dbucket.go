@@ -139,6 +139,8 @@ func (bkt *DBucket) Put(ts int64, vals []string, pld []byte) (err error) {
 		if err != nil {
 			return err
 		}
+	} else {
+		rpos = el.Position
 	}
 
 	ppos := bkt.tsToPPos(ts)
